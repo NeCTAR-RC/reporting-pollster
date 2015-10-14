@@ -365,7 +365,7 @@ def parse_args():
     parser.add_argument('--last-month', action='store_true', required=False,
                         help="update the last month's worth of data")
     parser.add_argument('-f', '--full-run', action='store_true',
-                        required=False, default=False, help="dry run")
+                        required=False, default=False, help="execute a full query/update run")
     args = parser.parse_args()
     print args
     return args
