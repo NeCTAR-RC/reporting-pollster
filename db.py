@@ -4,6 +4,7 @@
 #
 
 import config
+from config import Config
 import mysql.connector
 from datetime import datetime, timedelta
 import argparse
@@ -225,6 +226,45 @@ queries = {
 #
 
 
+class DB(object):
+    """
+    Wrap the database connections.
+    """
+
+    remote_creds = None
+    remote_conn = None
+    local_creds = None
+    local_conn = None
+
+    @classmethod
+    def remote(cls):
+        if not cls.remote_conn:
+            cls.remote_creds = Config.get_remote()
+            cls.remote_conn = mysql.connector.connect(**cls.remote_creds)
+            print cls.remote_conn.get_server_info()
+        return cls.remote_conn
+
+    @classmethod
+    def remote_cursor(cls):
+        if not cls.remote_conn:
+            cls.remote()
+        return cls.remote().cursor()
+
+    @classmethod
+    def local(cls):
+        if not cls.local_conn:
+            cls.local_creds = Config.get_local()
+            cls.local_conn = mysql.connector.connect(**cls.local_creds)
+            print cls.local_conn.get_server_info()
+        return cls.local_conn
+
+    @classmethod
+    def local_cursor(cls):
+        if not cls.local_conn:
+            cls.local()
+        return cls.local().cursor()
+
+
 class Connector(object):
     """
     Wrap the connection between the databases.
@@ -233,9 +273,8 @@ class Connector(object):
     def __init__(self, args):
         self.args = args
 
-        self.cfg = config.Config()
         if 'config_file' in args:
-            self.cfg.load_config(args.config_file)
+            Config.load_config(args.config_file)
 
         self.force_update = False
         if 'force_update' in args:
@@ -243,40 +282,10 @@ class Connector(object):
 
         self.default_lu = self.get_default_last_update()
 
-        self.remote = self.get_remote_connection()
-        self.local = self.get_local_connection()
-
-    def get_remote_connection(self):
-        remote_creds = self.cfg.get_remote()
-        remote = mysql.connector.connect(**remote_creds)
-        print remote.get_server_info()
-        return remote
-
-    def get_local_connection(self):
-        local_creds = self.cfg.get_local()
-        local = mysql.connector.connect(**local_creds)
-        print local.get_server_info()
-        return local
-
-    def get_default_last_update(self):
-        last_update = None
-        if 'last_updated' in self.args:
-            last_update = datetime.strptime(self.args.last_updated, "%Y%m%d")
-        if 'last_day' in self.args:
-            print "last day"
-            last_update = datetime.now() - timedelta(days=1)
-        if 'last_week' in self.args:
-            print "last week"
-            last_update = datetime.now() - timedelta(weeks=1)
-        if 'last_month' in self.args:
-            print "last month"
-            last_update = datetime.now() - timedelta(days=30)
-        return last_update
-
     def get_last_update(self, table):
         if self.default_lu:
             return self.default_lu
-        cursor = self.local.cursor()
+        cursor = DB.local().cursor()
         cursor.execute(queries['metadata']['query'], (table, ))
         row = cursor.fetchone()
         res = None
@@ -303,8 +312,8 @@ class Connector(object):
             print "Unrecognised table " + table
             return
         start = datetime.now()
-        rcursor = self.remote.cursor()
-        lcursor = self.local.cursor()
+        rcursor = DB.remote().cursor()
+        lcursor = DB.local().cursor()
 
         if not self.args.full_run:
             self.dry_run(table)
@@ -333,7 +342,7 @@ class Connector(object):
         lcursor.executemany(query, rdata)
         print repr(lcursor.rowcount) + " rows updated"
         self.update_metadata(table)
-        self.local.commit()
+        DB.local().commit()
         print "Warnings: %s" % (lcursor.fetchwarnings())
         end = datetime.now()
         print "Elapsed time:"
@@ -342,7 +351,7 @@ class Connector(object):
 
     # update the metadata table
     def update_metadata(self, table):
-        cursor = self.local.cursor()
+        cursor = DB.local().cursor()
         cursor.execute(queries['metadata']['update'], (table, ))
 
 
@@ -366,6 +375,7 @@ def parse_args():
                         help="update the last month's worth of data")
     parser.add_argument('-f', '--full-run', action='store_true',
                         required=False, default=False, help="execute a full query/update run")
+    parser.add_argument('--debug', action='count', help="increase debug level")
     args = parser.parse_args()
     print args
     return args

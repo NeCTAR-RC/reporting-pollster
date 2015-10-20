@@ -29,19 +29,16 @@ class Config(object):
     """
     Configuration wrapper class.
     """
+    remote = None
+    local = None
 
-    def __init__(self, filename=None):
-        print "Initialising configuration"
-        self.remote = {}
-        self.local = {}
+    def __init__(self):
+        self.load_config()
 
-        if not filename:
-            self.remote = remote.copy()
-            self.local = local.copy()
-        else:
-            self.load_config(filename)
-
-    def load_config(self, filename=config_file):
+    @classmethod
+    def load_config(cls, filename=config_file):
+        if cls.remote and cls.local:
+            return
         print "Loading configuration from " + filename
         parser = SafeConfigParser()
         parser.read(filename)
@@ -51,15 +48,21 @@ class Config(object):
         if not parser.has_section('local'):
             print "No local database configuration - failing"
             sys.exit(1)
-        self.remote = {}
-        self.local = {}
+        cls.remote = {}
+        cls.local = {}
         for (name, value) in parser.items('remote'):
-            self.remote[name] = value
+            cls.remote[name] = value
         for (name, value) in parser.items('local'):
-            self.local[name] = value
+            cls.local[name] = value
 
-    def get_remote(self):
-        return self.remote
+    @classmethod
+    def get_remote(cls):
+        if not cls.remote:
+            cls.load_config()
+        return cls.remote
 
-    def get_local(self):
-        return self.local
+    @classmethod
+    def get_local(cls):
+        if not cls.local:
+            cls.load_config()
+        return cls.local
