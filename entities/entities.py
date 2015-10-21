@@ -16,6 +16,8 @@
 # in-memory object.
 
 import sys
+from datetime import datetime
+from datetime import timedelta
 from common.DB import DB
 import entities
 
@@ -42,6 +44,15 @@ class Entity(object):
         self.data = []
         self.dry_run = not self.args.full_run
         self.last_update = None
+        self.extract_time = timedelta()
+        self.transform_time = timedelta()
+        self.load_time = timedelta()
+
+    # this really needs to be done properly with logging and stuff, but for
+    # now this will do
+    def _debug(self, msg):
+        if 'debug' in self.args:
+            print msg
 
     @classmethod
     def from_table_name(cls, table, args):
@@ -63,9 +74,11 @@ class Entity(object):
         return entity(args)
 
     def _extract_all(self):
+        self._debug("Extracting all from table " + self.table)
         cursor = DB.remote_cursor()
         cursor.execute(self.queries['query'])
         self.db_data = cursor.fetchall()
+        self._debug("Rows returned: %d" % (cursor.rowcount))
 
     def _extract_all_dry_run(self):
         print "Extracting data for " + self.table + " table"
@@ -73,10 +86,12 @@ class Entity(object):
             print "Query: " + self.queries['query']
 
     def _extract_all_last_update(self):
+        self._debug("Extracting all with last update from table " + self.table)
         cursor = DB.remote_cursor()
         cursor.execute(self.queries['query_last_update'],
                        (self.last_update, self.last_update))
         self.db_data = cursor.fetchall()
+        self._debug("Rows returned: %d" % (cursor.rowcount))
 
     def _extract_dry_run_last_update(self):
         print "Extracting data for " + self.table + " table (last update)"
@@ -94,6 +109,9 @@ class Entity(object):
             self._extract_all()
 
     def _extract_with_last_update(self):
+        """
+        Can be used when a last_update value is meaningfull for this entity
+        """
         self.last_update = self.get_last_update()
         if 'force_update' in self.args:
             self.last_update = False
@@ -124,19 +142,54 @@ class Entity(object):
         """
         raise NotImplementedError()
 
+    def _load_dry_run(self):
+        print "Loading data for " + self.table + " table"
+        if 'debug' in self.args:
+            print "Query: " + self.queries['update']
+
+    def _load(self):
+        self._debug("Loading data for " + self.table + " table")
+        cursor = DB.local_cursor()
+        # necessary because it's entirely possible for a last_update query to
+        # return no data
+        if len(self.data) > 0:
+            cursor.executemany(self.queries['update'],
+                           self.data)
+        self._debug("Rows updated: %d" % (cursor.rowcount))
+        self.set_last_update()
+
+    def _load_simple(self):
+        if self.dry_run:
+            self._load_dry_run()
+        else:
+            self._load()
+
     def load(self):
         """
         Load data about this entity into the data store.
         """
         raise NotImplementedError()
 
+    def _get_timing(self):
+        msg = (
+            "Process timing (%s):" % (self.table)
+            + "\textract: %f" % (self.extract_time.total_seconds())
+            + "\ttransform: %f" % (self.transform_time.total_seconds())
+            + "\tload: %f" % (self.load_time.total_seconds())
+        )
+        return msg
+
+
     def process(self):
         """
         Wrapper for the extract/load loop
         """
+        self._debug("Processing table " + self.table)
         self.extract()
         self.transform()
         self.load()
+
+        self._debug(self._get_timing())
 
     @classmethod
     def _get_default_last_update(cls, args):
@@ -172,15 +225,15 @@ class Entity(object):
         last_update = self._get_default_last_update(self.args)
         if not last_update:
             last_update = self._get_last_update(self.table)
+        self._debug("Last update: %s" % (last_update.isoformat()))
         return last_update
 
-    @classmethod
-    def set_last_update(cls, table):
+    def set_last_update(self):
         """
         Set the last_update field to the current time for the given table
         """
         cursor = DB.local_cursor()
-        cursor.execute(cls.metadata_update, (table, ))
+        cursor.execute(self.metadata_update, (self.table, ))
         
 
 class Hypervisor(Entity):
@@ -218,28 +271,20 @@ class Hypervisor(Entity):
     # Right now this is entirely the database.
 
     def extract(self):
+        start = datetime.now()
         self._extract_with_last_update()
+        self.extract_time = datetime.now() - start
 
     # ded simple until we have more than one data source
     def transform(self):
+        start = datetime.now()
         self.data = self.db_data
-
-    def _load_dry_run(self):
-        print "Loading data for hypervisor table"
-        if 'debug' in self.args:
-            print "Query: " + self.queries['update']
-
-    def _load(self):
-        cursor = DB.local_cursor()
-        cursor.execute(self.queries['update'],
-                       self.data)
-        self.set_last_update()
+        self.transform_time = datetime.now() - start
 
     def load(self):
-        if self.dry_run:
-            self._load_dry_run()
-        else:
-            self._load()
+        start = datetime.now()
+        self._load_simple()
+        self.load_time = datetime.now() - start
 
 
 class Project(Entity):
@@ -298,13 +343,19 @@ class Project(Entity):
         self.db_data = []
 
     def extract(self):
+        start = datetime.now()
         self._extract_no_last_update()
+        self.extract_time = datetime.now() - start
 
     def transform(self):
+        start = datetime.now()
         self.data = self.db_data
+        self.transform_time = datetime.now() - start
 
     def load(self):
-        pass
+        start = datetime.now()
+        self._load_simple()
+        self.load_time = datetime.now() - start
 
 
 class User(Entity):
@@ -334,13 +385,19 @@ class User(Entity):
         self.db_data = []
 
     def extract(self):
+        start = datetime.now()
         self._extract_no_last_update()
+        self.extract_time = datetime.now() - start
 
     def transform(self):
+        start = datetime.now()
         self.data = self.db_data
+        self.transform_time = datetime.now() - start
 
     def load(self):
-        pass
+        start = datetime.now()
+        self._load_simple()
+        self.load_time = datetime.now() - start
 
 class Role(Entity):
     """
@@ -374,17 +431,20 @@ class Role(Entity):
         self.db_data = []
 
     def extract(self):
+        start = datetime.now()
         self._extract_no_last_update()
+        self.extract_time = datetime.now() - start
 
     def transform(self):
+        start = datetime.now()
         self.data = self.db_data
+        self.transform_time = datetime.now() - start
 
     def load(self):
-        pass
+        start = datetime.now()
+        self._load_simple()
+        self.load_time = datetime.now() - start
 
-
-    def get_last_updated(self):
-        return False
 
 class Flavour(Entity):
     """
@@ -418,13 +478,19 @@ class Flavour(Entity):
         self.db_data = []
 
     def extract(self):
+        start = datetime.now()
         self._extract_with_last_update()
+        self.extract_time = datetime.now() - start
 
     def transform(self):
+        start = datetime.now()
         self.data = self.db_data
+        self.transform_time = datetime.now() - start
 
     def load(self):
-        pass
+        start = datetime.now()
+        self._load_simple()
+        self.load_time = datetime.now() - start
 
 
 class Instance(Entity):
@@ -462,13 +528,19 @@ class Instance(Entity):
         self.db_data = []
 
     def extract(self):
+        start = datetime.now()
         self._extract_with_last_update()
+        self.extract_time = datetime.now() - start
 
     def transform(self):
+        start = datetime.now()
         self.data = self.db_data
+        self.transform_time = datetime.now() - start
 
     def load(self):
-        pass
+        start = datetime.now()
+        self._load_simple()
+        self.load_time = datetime.now() - start
 
 
 class Volume(Entity):
@@ -503,13 +575,19 @@ class Volume(Entity):
         self.db_data = []
 
     def extract(self):
+        start = datetime.now()
         self._extract_with_last_update()
+        self.extract_time = datetime.now() - start
 
     def transform(self):
+        start = datetime.now()
         self.data = self.db_data
+        self.transform_time = datetime.now() - start
 
     def load(self):
-        pass
+        start = datetime.now()
+        self._load_simple()
+        self.load_time = datetime.now() - start
 
 
 class Image(Entity):
@@ -541,12 +619,17 @@ class Image(Entity):
         self.db_data = []
 
     def extract(self):
+        start = datetime.now()
         self._extract_with_last_update()
+        self.extract_time = datetime.now() - start
 
     def transform(self):
+        start = datetime.now()
         self.data = self.db_data
+        self.transform_time = datetime.now() - start
 
     def load(self):
-        pass
-
+        start = datetime.now()
+        self._load_simple()
+        self.load_time = datetime.now() - start
 
