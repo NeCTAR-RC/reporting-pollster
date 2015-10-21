@@ -4,8 +4,9 @@
 #
 
 import config
-from config import Config
-import mysql.connector
+from common.config import Config
+from common.DB import DB
+from entities.entities import Entity
 from datetime import datetime, timedelta
 import argparse
 
@@ -226,135 +227,6 @@ queries = {
 #
 
 
-class DB(object):
-    """
-    Wrap the database connections.
-    """
-
-    remote_creds = None
-    remote_conn = None
-    local_creds = None
-    local_conn = None
-
-    @classmethod
-    def remote(cls):
-        if not cls.remote_conn:
-            cls.remote_creds = Config.get_remote()
-            cls.remote_conn = mysql.connector.connect(**cls.remote_creds)
-            print cls.remote_conn.get_server_info()
-        return cls.remote_conn
-
-    @classmethod
-    def remote_cursor(cls):
-        if not cls.remote_conn:
-            cls.remote()
-        return cls.remote().cursor()
-
-    @classmethod
-    def local(cls):
-        if not cls.local_conn:
-            cls.local_creds = Config.get_local()
-            cls.local_conn = mysql.connector.connect(**cls.local_creds)
-            print cls.local_conn.get_server_info()
-        return cls.local_conn
-
-    @classmethod
-    def local_cursor(cls):
-        if not cls.local_conn:
-            cls.local()
-        return cls.local().cursor()
-
-
-class Connector(object):
-    """
-    Wrap the connection between the databases.
-    """
-
-    def __init__(self, args):
-        self.args = args
-
-        if 'config_file' in args:
-            Config.load_config(args.config_file)
-
-        self.force_update = False
-        if 'force_update' in args:
-            self.force_update = True
-
-        self.default_lu = self.get_default_last_update()
-
-    def get_last_update(self, table):
-        if self.default_lu:
-            return self.default_lu
-        cursor = DB.local().cursor()
-        cursor.execute(queries['metadata']['query'], (table, ))
-        row = cursor.fetchone()
-        res = None
-        if row:
-            res = row[0]
-        return res
-
-    def dry_run(self, table):
-        print "Processing table " + table
-
-        last_update = self.get_last_update(table)
-        if 'force_update' in self.args:
-            last_update = False
-
-        if last_update and 'query_last_updated' in queries[table]:
-            q = queries[table]['query_last_updated']
-            print "Query: " + q % (last_update, last_update)
-        else:
-            print "Query: " + queries[table]['query']
-        print "Update: " + queries[table]['update']
-
-    def process_table(self, table):
-        if table not in queries:
-            print "Unrecognised table " + table
-            return
-        start = datetime.now()
-        rcursor = DB.remote().cursor()
-        lcursor = DB.local().cursor()
-
-        if not self.args.full_run:
-            self.dry_run(table)
-            return
-
-        last_update = self.get_last_update(table)
-        if 'force_update' in self.args:
-            last_update = False
-
-        if last_update:
-            print "Updating from " + last_update.isoformat()
-
-        if last_update and 'query_last_updated' in queries[table]:
-            print "Processing table " + table + " (last updated)"
-            query = queries[table]['query_last_updated']
-            args = (last_update, last_update)
-            rcursor.execute(query, args)
-        else:
-            print "Processing table " + table
-            query = queries[table]['query']
-            rcursor.execute(query)
-        rdata = rcursor.fetchall()
-        print repr(rcursor.rowcount) + " rows returned"
-        middle = datetime.now()
-        query = queries[table]['update']
-        lcursor.executemany(query, rdata)
-        print repr(lcursor.rowcount) + " rows updated"
-        self.update_metadata(table)
-        DB.local().commit()
-        print "Warnings: %s" % (lcursor.fetchwarnings())
-        end = datetime.now()
-        print "Elapsed time:"
-        print "query:\t""{0}".format((middle-start).total_seconds())
-        print "update:\t{0}".format((end-middle).total_seconds())
-
-    # update the metadata table
-    def update_metadata(self, table):
-        cursor = DB.local().cursor()
-        cursor.execute(queries['metadata']['update'], (table, ))
-
-
 def parse_args():
 
     parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
@@ -384,10 +256,13 @@ def parse_args():
 def main():
     args = parse_args()
 
-    conn = Connector(args)
+    cfg = Config()
+    if 'config_file' in args:
+        Config.reload_config(args.config_file)
 
     for table in tables:
-        conn.process_table(table)
+        entity = Entity.from_table_name(table, args)
+        entity.process()
 
 
 if __name__ == '__main__':
