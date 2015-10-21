@@ -195,7 +195,7 @@ class Hypervisor(Entity):
             "select id, hypervisor_hostname, host_ip, vcpus, "
             "memory_mb, local_gb from nova.compute_nodes"
         ),
-        'query_last_updated': (
+        'query_last_update': (
             "select id, hypervisor_hostname, host_ip, vcpus, "
             "memory_mb, local_gb from nova.compute_nodes "
             "where deleted_at > %s or updated_at > %s"
@@ -398,7 +398,7 @@ class Flavour(Entity):
             "ephemeral_gb, is_public "
             "from nova.instance_types"
         ),
-        'query_last_updated': (
+        'query_last_update': (
             "select id, flavorid, name, vcpus, memory_mb, root_gb as root, "
             "ephemeral_gb, is_public "
             "from nova.instance_types "
@@ -439,7 +439,7 @@ class Instance(Entity):
             "deleted_at, if(deleted<>0,false,true), host, availability_zone "
             "from nova.instances"
         ),
-        'query_last_updated': (
+        'query_last_update': (
             "select project_id, uuid, display_name, vcpus, memory_mb, "
             "root_gb, ephemeral_gb, instance_type_id, user_id, created_at, "
             "deleted_at, if(deleted<>0,false,true), host, availability_zone "
@@ -482,7 +482,7 @@ class Volume(Entity):
             "deleted_at, if(attach_status='attached',true,false), "
             "instance_uuid, availability_zone from cinder.volumes"
         ),
-        'query_last_updated': (
+        'query_last_update': (
             "select id, project_id, display_name, size, created_at, "
             "deleted_at, if(attach_status='attached',true,false), "
             "instance_uuid, availability_zone from cinder.volumes "
@@ -522,7 +522,7 @@ class Image(Entity):
             "select id, owner, name, size, status, is_public, created_at, "
             "deleted_at from glance.images"
         ),
-        'query_last_updated': (
+        'query_last_update': (
             "select id, owner, name, size, status, is_public, created_at, "
             "deleted_at from glance.images "
             "where deleted_at > %s or updated_at > %s"

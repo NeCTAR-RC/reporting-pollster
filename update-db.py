@@ -3,7 +3,6 @@
 # Database connection support
 #
 
-import config
 from common.config import Config
 from common.DB import DB
 from entities.entities import Entity
