@@ -18,6 +18,7 @@
 import sys
 from datetime import datetime
 from datetime import timedelta
+from datetime import date
 from common.DB import DB
 import entities
 
@@ -195,7 +196,7 @@ class Entity(object):
     def _get_default_last_update(cls, args):
         last_update = None
         if 'last_updated' in args:
-            last_update = datetime.strptime(self.args.last_updated, "%Y%m%d")
+            last_update = datetime.strptime(args.last_updated, "%Y%m%d")
         if 'last_day' in args:
             print "last day"
             last_update = datetime.now() - timedelta(days=1)
@@ -213,7 +214,7 @@ class Entity(object):
         Get the time that the data was updated most recently, so that we can
         process only the updated data.
         """
-        cursor = DB.local_cursor()
+        cursor = DB.local_cursor(dictionary=False)
         cursor.execute(cls.metadata_query, (table, ))
         row = cursor.fetchone()
         res = None
@@ -232,7 +233,7 @@ class Entity(object):
         """
         Set the last_update field to the current time for the given table
         """
-        cursor = DB.local_cursor()
+        cursor = DB.local_cursor(dictionary=False)
         cursor.execute(self.metadata_update, (self.table, ))
         
 
@@ -256,7 +257,8 @@ class Hypervisor(Entity):
         'update': (
             "replace into hypervisor "
             "(id, hostname, ip_address, cpus, memory, local_storage) "
-            "values (%s, %s, %s, %s, %s, %s)"
+            "values (%(id)s, %(hostname)s, %(ip_address)s, %(cpus)s, "
+            "%(memory)s, %(local_storage)s)"
         ),
     }
 
@@ -269,6 +271,16 @@ class Hypervisor(Entity):
     # PUll all the data from whatever sources we need, and assemble them here
     #
     # Right now this is entirely the database.
+
+    def new_record(self):
+        return {
+            'id': None,
+            'hostname': None,
+            'ip_address': None,
+            'cpus': None,
+            'memory': None,
+            'local_storage': None
+        }
 
     def extract(self):
         start = datetime.now()
@@ -295,9 +307,12 @@ class Project(Entity):
     """
     queries = {
         'query': (
-            "select distinct kp.id, kp.name, kp.enabled, i.hard_limit, "
-            "c.hard_limit, r.hard_limit, g.total_limit, v.total_limit, "
-            "s.total_limit "
+            "select distinct kp.id as id, kp.name as display_name, "
+            "kp.enabled as enabled, i.hard_limit as quota_instances, "
+            "c.hard_limit as quota_vcpus, r.hard_limit as quota_memory, "
+            "g.total_limit as quota_volume_total, "
+            "s.total_limit as quota_snapshots, "
+            "v.total_limit as quota_volume_count "
             "from keystone.project as kp left outer join "
             "( select  *  from  nova.quotas where deleted = 0 "
             "and resource = 'ram' ) "
@@ -332,7 +347,10 @@ class Project(Entity):
             "(id, display_name, enabled, quota_instances, quota_vcpus, "
             "quota_memory, quota_volume_total, quota_snapshot, "
             "quota_volume_count) "
-            "values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            "values (%(id)s, %(display_name)s, %(enabled)s, "
+            "%(quota_instances)s, %(quota_vcpus)s, %(quota_memory)s, "
+            "%(quota_volume_total)s, %(quota_snapshots)s, "
+            "%(quota_volume_count)s)"
         ),
     }
 
@@ -365,8 +383,8 @@ class User(Entity):
     """
     queries = {
         'query': (
-            "select ku.id, ru.displayname, ru.email, ku.default_project_id, "
-            "ku.enabled "
+            "select ku.id as id, ru.displayname as name, ru.email as email, "
+            "ku.default_project_id as default_project, ku.enabled as enabled "
             "from "
             "keystone.user as ku join rcshibboleth.user as ru "
             "on ku.id = ru.user_id"
@@ -374,7 +392,8 @@ class User(Entity):
         'update': (
             "replace into user "
             "(id, name, email, default_project, enabled) "
-            "values (%s, %s, %s, %s, %s)"
+            "values (%(id)s, %(name)s, %(email)s, %(default_project)s, "
+            "%(enabled)s)"
         ),
     }
 
@@ -408,7 +427,8 @@ class Role(Entity):
 
     queries = {
         'query': (
-            "select kr.name, ka.actor_id, ka.target_id "
+            "select kr.name as role, ka.actor_id as user, "
+            "ka.target_id as project "
             "from keystone.assignment as ka join keystone.role as kr "
             "on ka.role_id = kr.id "
             "where ka.type = 'UserProject' "
@@ -420,7 +440,7 @@ class Role(Entity):
         'update': (
             "replace into role "
             "(role, user, project) "
-            "values (%s, %s, %s)"
+            "values (%(role)s, %(user)s, %(project)s)"
         ),
     }
 
@@ -454,20 +474,21 @@ class Flavour(Entity):
 
     queries = {
         'query': (
-            "select id, flavorid, name, vcpus, memory_mb, root_gb as root, "
-            "ephemeral_gb, is_public "
+            "select id, flavorid as uuid, name, vcpus, memory_mb as memory, "
+            "root_gb as root, ephemeral_gb as ephemeral, is_public as public "
             "from nova.instance_types"
         ),
         'query_last_update': (
-            "select id, flavorid, name, vcpus, memory_mb, root_gb as root, "
-            "ephemeral_gb, is_public "
+            "select id, flavorid as uuid, name, vcpus, memory_mb as memory, "
+            "root_gb as root, ephemeral_gb as ephemeral, is_public as public "
             "from nova.instance_types "
             "where deleted_at > %s or updated_at > %s"
         ),
         'update': (
             "replace into flavour "
             "(id, uuid, name, vcpus, memory, root, ephemeral, public) "
-            "values (%s, %s, %s, %s, %s, %s, %s, %s)"
+            "values (%(id)s, %(uuid)s, %(name)s, %(vcpus)s, %(memory)s, "
+            "%(root)s, %(ephemeral)s, %(public)s)"
         ),
     }
 
@@ -500,24 +521,33 @@ class Instance(Entity):
     """
     queries = {
         'query': (
-            "select project_id, uuid, display_name, vcpus, memory_mb, "
-            "root_gb, ephemeral_gb, instance_type_id, user_id, created_at, "
-            "deleted_at, if(deleted<>0,false,true), host, availability_zone "
-            "from nova.instances"
+            "select project_id, uuid as id, display_name as name, vcpus, "
+            "memory_mb as memory, root_gb as root, ephemeral_gb as ephemeral, "
+            "instance_type_id as flavour, user_id as created_by, "
+            "created_at as created, deleted_at as deleted, "
+            "if(deleted<>0,false,true) as active, host as hypervisor, "
+            "availability_zone "
+            "from nova.instances order by created_at"
         ),
         'query_last_update': (
-            "select project_id, uuid, display_name, vcpus, memory_mb, "
-            "root_gb, ephemeral_gb, instance_type_id, user_id, created_at, "
-            "deleted_at, if(deleted<>0,false,true), host, availability_zone "
+            "select project_id, uuid as id, display_name as name, vcpus, "
+            "memory_mb as memory, root_gb as root, ephemeral_gb as ephemeral, "
+            "instance_type_id as flavour, user_id as created_by, "
+            "created_at as created, deleted_at as deleted, "
+            "if(deleted<>0,false,true) as active, host as hypervisor, "
+            "availability_zone "
             "from nova.instances "
-            "where deleted_at > %s or updated_at > %s"
+            "where deleted_at > %s or updated_at > %s order by created_at"
         ),
         'update': (
             "replace into instance "
             "(project_id, id, name, vcpus, memory, root, ephemeral, flavour, "
             "created_by, created, deleted, active, hypervisor, "
             "availability_zone) "
-            "values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            "values (%(project_id)s, %(id)s, %(name)s, %(vcpus)s, %(memory)s, "
+            "%(root)s, %(ephemeral)s, %(flavour)s, %(created_by)s, "
+            "%(created)s, %(deleted)s, %(active)s, %(hypervisor)s, "
+            "%(availability_zone)s)"
         ),
     }
 
@@ -532,8 +562,31 @@ class Instance(Entity):
         self._extract_with_last_update()
         self.extract_time = datetime.now() - start
 
+    def new_hist_agg(self, date):
+        return {
+            'day': date,
+            'vcpus': None,
+            'memory': None,
+            'local_storage': None
+        }
+
+    def get_instances_on_day(self, date):
+        pass
+
+
     def transform(self):
         start = datetime.now()
+        # the data should be ordered by created_at, so we start by taking the
+        # created_at value and use that as the starting point.
+        hist_agg = []
+        if len(self.db_data) > 0:
+            start_date = self.db_data[0]['created']
+            start_date = datetime(start_date.year, 
+                                  start_date.month, 
+                                  start_date.day + 1)
+        # now we need to filter the data to find entries where the created_at
+        # value is less than the time we're interested in, and the deleted_at
+        # value is greater than
         self.data = self.db_data
         self.transform_time = datetime.now() - start
 
@@ -550,13 +603,15 @@ class Volume(Entity):
     """
     queries = {
         'query': (
-            "select id, project_id, display_name, size, created_at, "
-            "deleted_at, if(attach_status='attached',true,false), "
-            "instance_uuid, availability_zone from cinder.volumes"
+            "select id, project_id, display_name, size, "
+            "created_at as created, deleted_at as deleted, "
+            "if(attach_status='attached',true,false) as attached, "
+            "instance_uuid, availability_zone from cinder.volumes "
         ),
         'query_last_update': (
-            "select id, project_id, display_name, size, created_at, "
-            "deleted_at, if(attach_status='attached',true,false), "
+            "select id, project_id, display_name, size, "
+            "created_at as created, deleted_at as deleted, "
+            "if(attach_status='attached',true,false) as attached, "
             "instance_uuid, availability_zone from cinder.volumes "
             "where deleted_at > %s or updated_at > %s"
         ),
@@ -564,7 +619,9 @@ class Volume(Entity):
             "replace into volume "
             "(id, project_id, display_name, size, created, deleted, attached, "
             "instance_uuid, availability_zone) "
-            "values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            "values (%(id)s, %(project_id)s, %(display_name)s, %(size)s, "
+            "%(created)s, %(deleted)s, %(attached)s, %(instance_uuid)s, "
+            "%(availability_zone)s)"
         ),
     }
 
@@ -597,18 +654,21 @@ class Image(Entity):
     """
     queries = {
         'query': (
-            "select id, owner, name, size, status, is_public, created_at, "
-            "deleted_at from glance.images"
+            "select id, owner as project_id, name, size, status, "
+            "is_public as public, created_at as created, "
+            "deleted_at as deleted from glance.images"
         ),
         'query_last_update': (
-            "select id, owner, name, size, status, is_public, created_at, "
-            "deleted_at from glance.images "
+            "select id, owner as project_id, name, size, status, "
+            "is_public as public, created_at as created, "
+            "deleted_at as deleted from glance.images "
             "where deleted_at > %s or updated_at > %s"
         ),
         'update': (
             "replace into image "
             "(id, project_id, name, size, status, public, created, deleted) "
-            "values (%s, %s, %s, %s, %s, %s, %s, %s)"
+            "values (%(id)s, %(project_id)s, %(name)s, %(size)s, %(status)s, "
+            "%(public)s, %(created)s, %(deleted)s)"
         ),
     }
 
