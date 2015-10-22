@@ -76,7 +76,7 @@ create table user (
 create table `role` (
         role varchar(255) comment "Role name",
         user varchar(64) comment "User ID this role is assigned to",
-        project varchar(36) comment "Project ID the user is assigned this role in",
+        project varchar(36) comment "Project ID the user is assigned this role in"
 --      foreign key role_user_fkey (user) references user(id),
 --      foreign key role_project_fkey (project) references project(id)
 ) comment "User membership of projects, with roles";
@@ -152,3 +152,11 @@ create table image (
         key image_project_id_key (project_id)
 ) comment "Operating system images";
 
+-- Malcolm's historical data . . .
+create table historical_usage (
+        day date comment "One record should be added at midnight every day",
+        vcpus int comment "Allocated number of vCPUs",
+        memory int comment "Allocated memory in MB",
+        local_storage int comment "Allocated local storage (root+ephemeral) in GB",
+        primary key (day)
+) comment "Daily snapshots of resource usage";

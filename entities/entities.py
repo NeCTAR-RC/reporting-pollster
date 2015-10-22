@@ -156,6 +156,7 @@ class Entity(object):
         if len(self.data) > 0:
             cursor.executemany(self.queries['update'],
                            self.data)
+            DB.local().commit()
         self._debug("Rows updated: %d" % (cursor.rowcount))
         self.set_last_update()
 
@@ -222,19 +223,27 @@ class Entity(object):
             res = row[0]
         return res
 
-    def get_last_update(self):
+    def get_last_update(self, table=None):
+        if not table:
+            table = self.table
         last_update = self._get_default_last_update(self.args)
         if not last_update:
-            last_update = self._get_last_update(self.table)
-        self._debug("Last update: %s" % (last_update.isoformat()))
+            last_update = self._get_last_update(table)
+        if not last_update:
+            self._debug("No last update value available")
+        else:
+            self._debug("Last update: %s" % (last_update.isoformat()))
         return last_update
 
-    def set_last_update(self):
+    def set_last_update(self, table=None):
         """
         Set the last_update field to the current time for the given table
         """
+        if not table:
+            table = self.table
         cursor = DB.local_cursor(dictionary=False)
-        cursor.execute(self.metadata_update, (self.table, ))
+        cursor.execute(self.metadata_update, (table, ))
+        DB.local().commit()
         
 
 class Hypervisor(Entity):
@@ -537,7 +546,8 @@ class Instance(Entity):
             "if(deleted<>0,false,true) as active, host as hypervisor, "
             "availability_zone "
             "from nova.instances "
-            "where deleted_at > %s or updated_at > %s order by created_at"
+            "where deleted_at > %s or updated_at > %s "
+            "order by created_at"
         ),
         'update': (
             "replace into instance "
@@ -551,11 +561,18 @@ class Instance(Entity):
         ),
     }
 
+    hist_agg_query = (
+        "replace into historical_usage "
+        "(day, vcpus, memory, local_storage) "
+        "values (%(day)s, %(vcpus)s, %(memory)s, %(local_storage)s)"
+    )
+
     table = "instance"
  
     def __init__(self, args):
         super(Instance, self).__init__(args)
         self.db_data = []
+        self.hist_agg_data = []
 
     def extract(self):
         start = datetime.now()
@@ -565,34 +582,92 @@ class Instance(Entity):
     def new_hist_agg(self, date):
         return {
             'day': date,
-            'vcpus': None,
-            'memory': None,
-            'local_storage': None
+            'vcpus': 0,
+            'memory': 0,
+            'local_storage': 0
         }
 
-    def get_instances_on_day(self, date):
-        pass
-
-
-    def transform(self):
-        start = datetime.now()
+    def generate_hist_agg_data(self):
         # the data should be ordered by created_at, so we start by taking the
         # created_at value and use that as the starting point.
-        hist_agg = []
+        def date_to_day(date):
+             return datetime(date.year, 
+                             date.month, 
+                             date.day)
+        hist_agg = {}
         if len(self.db_data) > 0:
-            start_date = self.db_data[0]['created']
-            start_date = datetime(start_date.year, 
-                                  start_date.month, 
-                                  start_date.day + 1)
+            # create a list of records to be added to the historical_usate
+            # table
+            #
+            # How to handle a partial update? Well, we need to make sure that
+            # we don't put a partial day's update in, which means we need to
+            # have all the data for the state of things from the last_update
+            # time point forwards, rather than just the instances that have
+            # been updated. So we need to change the last_updated query to
+            # return all instances that were active at that point. That would
+            # mean where created_at < last_update and deleted_at > last_update
+            #
+            # we already have a last update value
+            if not self.last_update:
+                orig_day = date_to_day(self.db_data[0]['created'])
+            else:
+                orig_day = date_to_day(self.last_update)
+            # generate our storage dictionary, starting from the start date
+            # we determined above
+            day = orig_day
+            while day < datetime.now():
+                hist_agg[day.strftime("%s")] = self.new_hist_agg(day)
+                day = day + timedelta(1)
+            # Iterate over the list of instances, and update the
+            # historical usage records for each one.
+            for instance in self.db_data:
+                # here we start from the created date, and then if that's
+                # before the start date we found above we use that start date
+                # instead
+                day = date_to_day(instance['created'])
+                if day < orig_day:
+                    day = orig_day
+                deleted = date_to_day(datetime.now())
+                if instance['deleted']:
+                    deleted = date_to_day(instance['deleted'])
+                while day < deleted:
+                    key = day.strftime("%s")
+                    hist_agg[key]['vcpus'] += instance['vcpus']
+                    hist_agg[key]['memory'] += instance['memory']
+                    hist_agg[key]['local_storage'] += (instance['root'] 
+                                                       + instance['ephemeral'])
+                    day = day + timedelta(1)
+            for key in hist_agg:
+                self.hist_agg_data.append(hist_agg[key])
         # now we need to filter the data to find entries where the created_at
         # value is less than the time we're interested in, and the deleted_at
         # value is greater than
+
+    def transform(self):
+        start = datetime.now()
         self.data = self.db_data
+        self.generate_hist_agg_data()
         self.transform_time = datetime.now() - start
+
+    def _load_hist_agg(self):
+        self._debug("Loading data for historical_usage table")
+        cursor = DB.local_cursor()
+        # necessary because it's entirely possible for a last_update query to
+        # return no data
+        if len(self.hist_agg_data) > 0:
+            cursor.executemany(self.hist_agg_query,
+                           self.hist_agg_data)
+            DB.local().commit()
+        self._debug("Rows updated: %d" % (cursor.rowcount))
+        # note that we never /use/ this to determine whether to update or not,
+        # this is for informational purposes only
+        self.set_last_update(table="historical_usage")
 
     def load(self):
         start = datetime.now()
+        # comment out for sanity while testing
         self._load_simple()
+        self._load_hist_agg()
         self.load_time = datetime.now() - start
 
 
