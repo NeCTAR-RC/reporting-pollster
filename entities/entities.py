@@ -261,7 +261,7 @@ class Hypervisor(Entity):
         'query_last_update': (
             "select id, hypervisor_hostname, host_ip, vcpus, "
             "memory_mb, local_gb from nova.compute_nodes "
-            "where deleted_at > %s or updated_at > %s"
+            "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
         'update': (
             "replace into hypervisor "
@@ -491,7 +491,7 @@ class Flavour(Entity):
             "select id, flavorid as uuid, name, vcpus, memory_mb as memory, "
             "root_gb as root, ephemeral_gb as ephemeral, is_public as public "
             "from nova.instance_types "
-            "where deleted_at > %s or updated_at > %s"
+            "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
         'update': (
             "replace into flavour "
@@ -546,7 +546,7 @@ class Instance(Entity):
             "if(deleted<>0,false,true) as active, host as hypervisor, "
             "availability_zone "
             "from nova.instances "
-            "where deleted_at > %s or updated_at > %s "
+            "where ifnull(deleted_at, now()) > %s or updated_at > %s "
             "order by created_at"
         ),
         'update': (
@@ -688,7 +688,7 @@ class Volume(Entity):
             "created_at as created, deleted_at as deleted, "
             "if(attach_status='attached',true,false) as attached, "
             "instance_uuid, availability_zone from cinder.volumes "
-            "where deleted_at > %s or updated_at > %s"
+            "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
         'update': (
             "replace into volume "
@@ -737,7 +737,7 @@ class Image(Entity):
             "select id, owner as project_id, name, size, status, "
             "is_public as public, created_at as created, "
             "deleted_at as deleted from glance.images "
-            "where deleted_at > %s or updated_at > %s"
+            "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
         'update': (
             "replace into image "
