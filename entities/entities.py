@@ -680,10 +680,10 @@ class Instance(Entity):
             cursor.executemany(self.hist_agg_query,
                            self.hist_agg_data)
             DB.local().commit()
+            # note that we never /use/ this to determine whether to update or
+            # not, this is for informational purposes only
+            self.set_last_update(table="historical_usage")
         self._debug("Rows updated: %d" % (cursor.rowcount))
-        # note that we never /use/ this to determine whether to update or not,
-        # this is for informational purposes only
-        self.set_last_update(table="historical_usage")
 
     def load(self):
         start = datetime.now()
