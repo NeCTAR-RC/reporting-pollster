@@ -35,13 +35,14 @@ create table metadata (
 --
 -- no interaction with other tables at present.
 create table hypervisor (
-        id int(11) comment "Compute node unique identifier",
+        id int(11) comment "Compute node identifier",
+        availability_zone varchar(255) comment "Compute node availability zone",
         hostname varchar(255) comment "Compute node hostname",
         ip_address varchar(39) comment "Compute node IP address",
         cpus int(11) comment "Number of installed CPU cores",
         memory int(11) comment "Total installed memory in MB",
         local_storage int(11) comment "Total local disk in GB",
-        primary key (id),
+        primary key (id, availability_zone),
         key hypervisor_hostname (hostname),
         key hypervisor_ip (ip_address)
 ) comment "Compute nodes";

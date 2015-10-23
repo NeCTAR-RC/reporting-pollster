@@ -19,7 +19,9 @@ import sys
 from datetime import datetime
 from datetime import timedelta
 from datetime import date
+import novaclient.v2.client as nvclient
 from common.DB import DB
+from common import credentials
 import entities
 
 
@@ -255,19 +257,20 @@ class Hypervisor(Entity):
 
     queries = {
         'query': (
-            "select id, hypervisor_hostname, host_ip, vcpus, "
-            "memory_mb, local_gb from nova.compute_nodes"
+            "select id, 'nova' as availability_zone, hypervisor_hostname, "
+            "host_ip, vcpus, memory_mb, local_gb from nova.compute_nodes"
         ),
         'query_last_update': (
-            "select id, hypervisor_hostname, host_ip, vcpus, "
-            "memory_mb, local_gb from nova.compute_nodes "
+            "select id, 'nova' as availability_zone, hypervisor_hostname, "
+            "host_ip, vcpus, memory_mb, local_gb from nova.compute_nodes "
             "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
         'update': (
             "replace into hypervisor "
-            "(id, hostname, ip_address, cpus, memory, local_storage) "
-            "values (%(id)s, %(hostname)s, %(ip_address)s, %(cpus)s, "
-            "%(memory)s, %(local_storage)s)"
+            "(id, availability_zone, hostname, ip_address, cpus, memory, "
+            "local_storage) "
+            "values (%(id)s, %(availability_zone)s, %(hostname)s, "
+            "%(ip_address)s, %(cpus)s, %(memory)s, %(local_storage)s)"
         ),
     }
 
@@ -276,6 +279,10 @@ class Hypervisor(Entity):
     def __init__(self, args):
         super(Hypervisor, self).__init__(args)
         self.db_data = []
+        self.api_data = None
+        self.data = []
+        novacreds = credentials.get_nova_credentials()
+        self.novaclient = nvclient.Client(**novacreds)
 
     # PUll all the data from whatever sources we need, and assemble them here
     #
@@ -284,6 +291,7 @@ class Hypervisor(Entity):
     def new_record(self):
         return {
             'id': None,
+            'availability_zone': None,
             'hostname': None,
             'ip_address': None,
             'cpus': None,
@@ -293,13 +301,27 @@ class Hypervisor(Entity):
 
     def extract(self):
         start = datetime.now()
-        self._extract_with_last_update()
+        # NeCTAR requires hypervisors details from the API
+        self.api_data = self.novaclient.hypervisors.list()
+        print len(self.api_data)
         self.extract_time = datetime.now() - start
 
     # ded simple until we have more than one data source
     def transform(self):
         start = datetime.now()
-        self.data = self.db_data
+        for hypervisor in self.api_data:
+            r = self.new_record()
+            # the cell/hypervisor id is in the form:
+            # nectar!cell@id, where the cell is the availability zone.
+            (az, hid) = hypervisor.id.split('!', 1)[1].split('@')
+            r['id'] = hid
+            r['availability_zone'] = az
+            r['hostname'] = hypervisor.hypervisor_hostname
+            r['ip_address'] = hypervisor.host_ip
+            r['cpus'] = hypervisor.vcpus
+            r['memory'] = hypervisor.memory_mb
+            r['local_storage'] = hypervisor.local_gb
+            self.data.append(r)
         self.transform_time = datetime.now() - start
 
     def load(self):
@@ -654,7 +676,7 @@ class Instance(Entity):
         cursor = DB.local_cursor()
         # necessary because it's entirely possible for a last_update query to
         # return no data
-        if len(self.hist_agg_data) > 0:
+        if len(self.hist_agg_data) > 0 and not self.dry_run:
             cursor.executemany(self.hist_agg_query,
                            self.hist_agg_data)
             DB.local().commit()
