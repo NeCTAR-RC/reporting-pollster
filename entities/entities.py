@@ -81,7 +81,7 @@ class Entity(object):
         self.db_data = cursor.fetchall()
         self._debug("Rows returned: %d" % (cursor.rowcount))
 
-    def _extract_all_dry_run(self):
+    def _extract_dry_run(self):
         print "Extracting data for " + self.table + " table"
         if 'debug' in self.args:
             print "Query: " + self.queries['query']
