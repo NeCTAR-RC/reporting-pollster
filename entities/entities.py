@@ -105,7 +105,7 @@ class Entity(object):
         Can be used when no last_update is available for this entity
         """
         if self.dry_run:
-            self._extract_all_dry_run()
+            self._extract_dry_run()
         else:
             self._extract_all()
 
