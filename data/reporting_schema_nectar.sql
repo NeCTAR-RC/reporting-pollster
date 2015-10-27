@@ -157,6 +157,24 @@ create table image (
         key image_project_id_key (project_id)
 ) comment "Operating system images";
 
+-- no dependencies
+create table aggregate_host (
+        id int(11),
+        host varchar(255) comment "Host name, same as first part of hypervisor.hostname",
+        aggregate varchar(255) comment "Name of aggregate",
+        primary key (id)
+) comment "Active (non-deleted) mappings between aggregates and hosts";
+
+-- query to fill this (in a single-level DB - i.e. tenjin, not NeCTAR)
+-- select
+--          aggregate_hosts.id as id,
+--          aggregate_hosts.host as host,
+--          aggregates.name as aggregate
+-- from
+--          nova.aggregate_hosts join nova.aggregates on aggregate_hosts.aggregate_id = aggregates.id
+-- where
+--          aggregate_hosts.deleted = 0;
+-- 
 -- Malcolm's historical data . . .
 create table historical_usage (
         day date comment "One record should be added at midnight every day",

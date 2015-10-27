@@ -339,8 +339,9 @@ class Project(Entity):
     queries = {
         'query': (
             "select distinct kp.id as id, kp.name as display_name, "
-            "kp.enabled as enabled, i.hard_limit as quota_instances, "
-            "c.hard_limit as quota_vcpus, r.hard_limit as quota_memory, "
+            "kp.description as description, kp.enabled as enabled, "
+            "i.hard_limit as quota_instances, c.hard_limit as quota_vcpus, "
+            "r.hard_limit as quota_memory, "
             "g.total_limit as quota_volume_total, "
             "s.total_limit as quota_snapshots, "
             "v.total_limit as quota_volume_count "
@@ -375,10 +376,10 @@ class Project(Entity):
         ),
         'update': (
             "replace into project "
-            "(id, display_name, enabled, quota_instances, quota_vcpus, "
-            "quota_memory, quota_volume_total, quota_snapshot, "
+            "(id, display_name, description, enabled, quota_instances, "
+            "quota_vcpus, quota_memory, quota_volume_total, quota_snapshot, "
             "quota_volume_count) "
-            "values (%(id)s, %(display_name)s, %(enabled)s, "
+            "values (%(id)s, %(display_name)s, %(description)s, %(enabled)s, "
             "%(quota_instances)s, %(quota_vcpus)s, %(quota_memory)s, "
             "%(quota_volume_total)s, %(quota_snapshots)s, "
             "%(quota_volume_count)s)"
