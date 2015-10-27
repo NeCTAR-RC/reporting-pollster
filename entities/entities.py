@@ -268,9 +268,9 @@ class Hypervisor(Entity):
         'update': (
             "replace into hypervisor "
             "(id, availability_zone, hostname, ip_address, cpus, memory, "
-            "local_storage) "
+            "local_storage, last_seen) "
             "values (%(id)s, %(availability_zone)s, %(hostname)s, "
-            "%(ip_address)s, %(cpus)s, %(memory)s, %(local_storage)s)"
+            "%(ip_address)s, %(cpus)s, %(memory)s, %(local_storage)s, null)"
         ),
     }
 
@@ -506,12 +506,14 @@ class Flavour(Entity):
     queries = {
         'query': (
             "select id, flavorid as uuid, name, vcpus, memory_mb as memory, "
-            "root_gb as root, ephemeral_gb as ephemeral, is_public as public "
+            "root_gb as root, ephemeral_gb as ephemeral, is_public as public, "
+            "not deleted as active "
             "from nova.instance_types"
         ),
         'query_last_update': (
             "select id, flavorid as uuid, name, vcpus, memory_mb as memory, "
-            "root_gb as root, ephemeral_gb as ephemeral, is_public as public "
+            "root_gb as root, ephemeral_gb as ephemeral, is_public as public, "
+            "not deleted as active "
             "from nova.instance_types "
             "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
@@ -519,7 +521,7 @@ class Flavour(Entity):
             "replace into flavour "
             "(id, uuid, name, vcpus, memory, root, ephemeral, public) "
             "values (%(id)s, %(uuid)s, %(name)s, %(vcpus)s, %(memory)s, "
-            "%(root)s, %(ephemeral)s, %(public)s)"
+            "%(root)s, %(ephemeral)s, %(public)s, %(active)s)"
         ),
     }
 
@@ -703,22 +705,24 @@ class Volume(Entity):
             "select id, project_id, display_name, size, "
             "created_at as created, deleted_at as deleted, "
             "if(attach_status='attached',true,false) as attached, "
-            "instance_uuid, availability_zone from cinder.volumes "
+            "instance_uuid, availability_zone, not deleted as active "
+            "from cinder.volumes "
         ),
         'query_last_update': (
             "select id, project_id, display_name, size, "
             "created_at as created, deleted_at as deleted, "
             "if(attach_status='attached',true,false) as attached, "
-            "instance_uuid, availability_zone from cinder.volumes "
+            "instance_uuid, availability_zone, not deleted as active "
+            "from cinder.volumes "
             "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
         'update': (
             "replace into volume "
             "(id, project_id, display_name, size, created, deleted, attached, "
-            "instance_uuid, availability_zone) "
+            "instance_uuid, availability_zone, active) "
             "values (%(id)s, %(project_id)s, %(display_name)s, %(size)s, "
             "%(created)s, %(deleted)s, %(attached)s, %(instance_uuid)s, "
-            "%(availability_zone)s)"
+            "%(availability_zone)s, %(active)s)"
         ),
     }
 
@@ -753,19 +757,21 @@ class Image(Entity):
         'query': (
             "select id, owner as project_id, name, size, status, "
             "is_public as public, created_at as created, "
-            "deleted_at as deleted from glance.images"
+            "deleted_at as deleted, not deleted as active "
+            "from glance.images"
         ),
         'query_last_update': (
             "select id, owner as project_id, name, size, status, "
             "is_public as public, created_at as created, "
-            "deleted_at as deleted from glance.images "
+            "deleted_at as deleted, not deleted as active "
+            "from glance.images "
             "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
         'update': (
             "replace into image "
-            "(id, project_id, name, size, status, public, created, deleted) "
-            "values (%(id)s, %(project_id)s, %(name)s, %(size)s, %(status)s, "
-            "%(public)s, %(created)s, %(deleted)s)"
+            "(id, project_id, name, size, status, public, created, deleted, "
+            "active) values (%(id)s, %(project_id)s, %(name)s, %(size)s, "
+            "%(status)s, %(public)s, %(created)s, %(deleted)s, %(active)s)"
         ),
     }
 

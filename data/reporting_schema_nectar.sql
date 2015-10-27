@@ -42,6 +42,7 @@ create table hypervisor (
         cpus int(11) comment "Number of installed CPU cores",
         memory int(11) comment "Total installed memory in MB",
         local_storage int(11) comment "Total local disk in GB",
+        last_seen timestamp default current_timestamp on update current_timestamp comment "last seen",
         primary key (id, availability_zone),
         key hypervisor_hostname (hostname),
         key hypervisor_ip (ip_address)
@@ -95,6 +96,7 @@ create table flavour (
         root int comment "Size of root disk in GB",
         ephemeral int comment "Size of ephemeral disk in GB",
         public boolean comment "Is this flavour publically available",
+        active boolean comment "Is this flavour active",
         primary key (id),
         key flavour_uuid_key (uuid)
 ) comment "Types of virtual machine";
@@ -133,6 +135,7 @@ create table volume (
         attached boolean comment "Volume attached or not",
         instance_uuid varchar(36) comment "Instance the volume is attached to",
         availability_zone varchar(255) comment "Availability zone the volume exists in",
+        active boolean comment "Has this volume been deleted",
         primary key (id),
         key volume_project_id_key (project_id),
         key volume_instance_uuid_key (instance_uuid),
@@ -149,6 +152,7 @@ create table image (
         public boolean comment "Is this image publically available",
         created datetime comment "Time image was created",
         deleted datetime comment "Time image was deleted",
+        active boolean comment "Has this image been deleted",
         primary key (id),
         key image_project_id_key (project_id)
 ) comment "Operating system images";
