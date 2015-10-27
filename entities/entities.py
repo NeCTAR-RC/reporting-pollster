@@ -520,7 +520,7 @@ class Flavour(Entity):
         ),
         'update': (
             "replace into flavour "
-            "(id, uuid, name, vcpus, memory, root, ephemeral, public) "
+            "(id, uuid, name, vcpus, memory, root, ephemeral, public, active) "
             "values (%(id)s, %(uuid)s, %(name)s, %(vcpus)s, %(memory)s, "
             "%(root)s, %(ephemeral)s, %(public)s, %(active)s)"
         ),
