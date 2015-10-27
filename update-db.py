@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import argparse
 
 tables = [
+    'aggregate',
     'hypervisor',
     'project',
     'user',

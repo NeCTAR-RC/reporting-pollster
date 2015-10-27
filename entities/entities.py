@@ -246,7 +246,112 @@ class Entity(object):
         cursor = DB.local_cursor(dictionary=False)
         cursor.execute(self.metadata_update, (table, ))
         DB.local().commit()
-        
+
+
+class Aggregate(Entity):
+    """
+    Aggregate entity, which is used by OpenStack as part of its scheduling
+    logic. Sadly, this is probably entirely API dependant.
+    """
+
+    # this seems a bit silly, but it allows us to use the load_simple method.
+    queries = {
+        'update' = (
+            "replace into aggregate (id, availability_zone, name, created, "
+            "deleted, active) values (%(id)s, %(availability_zone)s, "
+            "%(name)s, %(created)s, %(deleted)s, %(active)s)"
+        ),
+    }
+
+    aggregate_host_cleanup = (
+        "delete * from aggregate_host"
+    )
+
+    aggregate_host_query = (
+        "replace into aggregate_host (id, availability_zone, host) "
+        "values (%(id)s, %(availability_zone)s, %(host)s)"
+    )
+
+    table = "aggregate"
+
+    def __init__(self, args):
+        super(Aggregate, self).__init__(args)
+        self.api_data = None
+        self.agg_data = []
+        self.agg_host_data = []
+        self.data = []
+        novacreds = credentials.get_nova_credentials()
+        self.novaclient = nvclient.Client(**novacreds)
+
+    def new_agg_record(self):
+        return {
+            'id': None,
+            'availability_zone': None,
+            'name': None,
+            'created': None,
+            'deleted': None,
+            'active': None,
+        }
+
+    def new_agg_host_record(self):
+        return {
+            'id': None,
+            'availability_zone': None,
+            'host': None,
+        }
+
+    def extract(self):
+        start = datetime.now()
+        # NeCTAR requires hypervisors details from the API
+        self.api_data = self.novaclient.aggregates.list()
+        self.extract_time = datetime.now() - start
+
+    def transform(self):
+        start = datetime.now()
+        # We have two separate pieces of data here: the aggregate itself, and
+        # the list of hosts assigned to each aggregate. We're dealing with them
+        # in the same place because the data all comes from one API query.
+        for aggregate in self.api_data:
+            agg = self.new_agg_record()
+            id = aggregate.id.split('!', 1)[1]
+            (az, id) = id.split('@')
+            agg['id'] = id
+            agg['availability_zone'] = az
+            agg['name'] = aggregate.name
+            agg['created'] = aggregate.created
+            agg['deleted'] = aggregate.deleted
+            agg['active'] = not aggregate.deleted
+            self.agg_data.append(agg)
+
+            for host in aggregate.hosts:
+                h = self.new_agg_host_record()
+                h['id'] = id
+                h['availability_zone'] = az
+                h['host'] = host.split('.')[0]
+                self.agg_host_data.apend(h)
+
+        self.data = self.agg_data
+        self.transform_time = datetime.now() - start
+
+    def load(self):
+        start = datetime.now()
+
+        # the aggregate table is simple to deal with.
+        self._load_simple()
+
+        # we need to be a little careful with the aggregate_host table, because
+        # it's a real pain to know if hosts have been removed (we capture all
+        # the additions, of course, but not the removals). So we need to delete
+        # everything and start afresh with each update. To avoid people seeing
+        # things in an odd state we need to wrap this in a transaction.
+        DB.local().start_transaction()
+        cursor = DB.local_cursor()
+        cursor.execute(self.aggregate_host_cleanup)
+        cursor.execute(self.aggregate_host_query, self.agg_host_data)
+        DB.local().commit()
+
+        self.load_time = datetime.now() - start
+
 
 class Hypervisor(Entity):
     """

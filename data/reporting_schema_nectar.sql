@@ -157,12 +157,36 @@ create table image (
         key image_project_id_key (project_id)
 ) comment "Operating system images";
 
+-- Aggregate definitions
+--
+-- The (id, availability_zone) primary key is required by NeCTAR, which can
+-- have duplicate id keys as a result of this stuff being stored across multiple
+-- separate databases.
+--
+-- In addition, a lot of the interesting stuff is stored in a json 'metadata'
+-- field that is free-form. I'm ignoring this for the moment.
+create table aggregate (
+        id int(11),
+        availability_zone varchar(255) comment "Availability zone this aggregate is defined in",
+        name varchar(255) comment "Name of this aggregate",
+        created datetime comment "Time the aggregate was created",
+        deleted datetime comment "Time the aggregate was deleted",
+        active boolean comment "Is this aggregate active",
+        primary key (id, availability_zone)
+) comment "Aggregate definitions";
+
 -- no dependencies
+--
+-- Mapping between hypervisors and host aggregates.
+--
+-- This is logically a simple relationship table, but we can't do it that
+-- way because this stuff is stored and presented differently between the
+-- hypervisor and aggregate logical OpenStack entities.
 create table aggregate_host (
         id int(11),
+        availability_zone varchar(255) comment "Availability zone this aggregate is defined on",
         host varchar(255) comment "Host name, same as first part of hypervisor.hostname",
-        aggregate varchar(255) comment "Name of aggregate",
-        primary key (id)
+        primary key (id, availability_zone, host)
 ) comment "Active (non-deleted) mappings between aggregates and hosts";
 
 -- query to fill this (in a single-level DB - i.e. tenjin, not NeCTAR)
