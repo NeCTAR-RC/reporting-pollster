@@ -53,7 +53,10 @@ create table hypervisor (
 create table project (
         id varchar(36) comment "Unique identifier",
         display_name varchar(64) comment "Human-readable display name",
+        organisation varchar(255) comment "Organisation that runs this project",
+        description text comment "Project description",
         enabled boolean comment "If false, the project is not usable by users",
+        personal boolean comment "Is this a personal tenant",
         quota_instances int comment "Maximum concurrent instances",
         quota_vcpus int comment "Maximum concurrent virtual processor cores",
         quota_memory int comment "Maximum memory concurrently allocated in MB",

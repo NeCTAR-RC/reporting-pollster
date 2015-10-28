@@ -15,10 +15,9 @@
 # in memory while it was working, but wouldn't try to map each chunk to an
 # in-memory object.
 
-import sys
+import pickle
 from datetime import datetime
 from datetime import timedelta
-from datetime import date
 import novaclient.v2.client as nvclient
 from common.DB import DB
 from common import credentials
@@ -33,14 +32,14 @@ class Entity(object):
     """
 
     metadata_query = (
-            "select last_update from metadata "
-            "where table_name = %s limit 1"
+        "select last_update from metadata "
+        "where table_name = %s limit 1"
     )
     metadata_update = (
-            "insert into metadata (table_name, last_update) "
-            "values (%s, null) "
-            "on duplicate key update last_update = null"
-    ) 
+        "insert into metadata (table_name, last_update) "
+        "values (%s, null) "
+        "on duplicate key update last_update = null"
+    )
 
     def __init__(self, args):
         self.args = args
@@ -157,7 +156,7 @@ class Entity(object):
         # return no data
         if len(self.data) > 0:
             cursor.executemany(self.queries['update'],
-                           self.data)
+                               self.data)
             DB.local().commit()
         self._debug("Rows updated: %d" % (cursor.rowcount))
         self.set_last_update()
@@ -167,6 +166,22 @@ class Entity(object):
             self._load_dry_run()
         else:
             self._load()
+
+    def _load_many(self, query, data):
+        if self.dry_run:
+            if 'debug' in self.args:
+                print "Special query: " + query
+        else:
+            cursor = DB.local_cursor()
+            cursor.executemany(query, data)
+
+    # seems a bit silly, but this captures the dry_run and debug logic
+    def _run_sql_cursor(self, cursor, query):
+        if self.dry_run:
+            if 'debug' in self.args:
+                print "Generic query: " + query
+        else:
+            cursor.execute(query)
 
     def load(self):
         """
@@ -182,7 +197,6 @@ class Entity(object):
             + "\tload: %f" % (self.load_time.total_seconds())
         )
         return msg
-
 
     def process(self):
         """
@@ -243,6 +257,11 @@ class Entity(object):
         """
         if not table:
             table = self.table
+        if self.dry_run:
+            if 'debug' in self.args:
+                print "Setting last update on table " + table
+            return
+
         cursor = DB.local_cursor(dictionary=False)
         cursor.execute(self.metadata_update, (table, ))
         DB.local().commit()
@@ -256,7 +275,7 @@ class Aggregate(Entity):
 
     # this seems a bit silly, but it allows us to use the load_simple method.
     queries = {
-        'update' = (
+        'update':  (
             "replace into aggregate (id, availability_zone, name, created, "
             "deleted, active) values (%(id)s, %(availability_zone)s, "
             "%(name)s, %(created)s, %(deleted)s, %(active)s)"
@@ -264,7 +283,7 @@ class Aggregate(Entity):
     }
 
     aggregate_host_cleanup = (
-        "delete * from aggregate_host"
+        "delete from aggregate_host"
     )
 
     aggregate_host_query = (
@@ -318,8 +337,8 @@ class Aggregate(Entity):
             agg['id'] = id
             agg['availability_zone'] = az
             agg['name'] = aggregate.name
-            agg['created'] = aggregate.created
-            agg['deleted'] = aggregate.deleted
+            agg['created'] = aggregate.created_at
+            agg['deleted'] = aggregate.deleted_at
             agg['active'] = not aggregate.deleted
             self.agg_data.append(agg)
 
@@ -328,7 +347,7 @@ class Aggregate(Entity):
                 h['id'] = id
                 h['availability_zone'] = az
                 h['host'] = host.split('.')[0]
-                self.agg_host_data.apend(h)
+                self.agg_host_data.append(h)
 
         self.data = self.agg_data
         self.transform_time = datetime.now() - start
@@ -346,8 +365,8 @@ class Aggregate(Entity):
         # things in an odd state we need to wrap this in a transaction.
         DB.local().start_transaction()
         cursor = DB.local_cursor()
-        cursor.execute(self.aggregate_host_cleanup)
-        cursor.execute(self.aggregate_host_query, self.agg_host_data)
+        self._run_sql_cursor(cursor, self.aggregate_host_cleanup)
+        self._load_many(self.aggregate_host_query, self.agg_host_data)
         DB.local().commit()
 
         self.load_time = datetime.now() - start
@@ -445,6 +464,7 @@ class Project(Entity):
         'query': (
             "select distinct kp.id as id, kp.name as display_name, "
             "kp.description as description, kp.enabled as enabled, "
+            "kp.name like 'pt-%' as personal, "
             "i.hard_limit as quota_instances, c.hard_limit as quota_vcpus, "
             "r.hard_limit as quota_memory, "
             "g.total_limit as quota_volume_total, "
@@ -481,30 +501,139 @@ class Project(Entity):
         ),
         'update': (
             "replace into project "
-            "(id, display_name, description, enabled, quota_instances, "
-            "quota_vcpus, quota_memory, quota_volume_total, quota_snapshot, "
-            "quota_volume_count) "
-            "values (%(id)s, %(display_name)s, %(description)s, %(enabled)s, "
+            "(id, display_name, organisation, description, enabled, personal, "
+            "quota_instances, quota_vcpus, quota_memory, quota_volume_total, "
+            "quota_snapshot, quota_volume_count) "
+            "values (%(id)s, %(display_name)s, %(organisation)s, "
+            "%(description)s, %(enabled)s, %(personal)s, "
             "%(quota_instances)s, %(quota_vcpus)s, %(quota_memory)s, "
             "%(quota_volume_total)s, %(quota_snapshots)s, "
             "%(quota_volume_count)s)"
         ),
     }
 
+    tenant_owner_query = (
+        "select ka.target_id as tenant, ka.actor_id as user, "
+        "rc.shibboleth_attributes as shib_attr "
+        "from keystone.assignment as ka join rcshibboleth.user as rc "
+        "on ka.actor_id = rc.user_id "
+        "where ka.type = 'UserProject' and ka.role_id = "
+        "(select id from keystone.role where name = 'TenantManager')"
+    )
+
+    tenant_member_query = (
+        "select ka.target_id as tenant, ka.actor_id as user, "
+        "rc.shibboleth_attributes as shib_attr "
+        "from keystone.assignment as ka join rcshibboleth.user as rc "
+        "on ka.actor_id = rc.user_id "
+        "where ka.type = 'UserProject' and ka.role_id = "
+        "(select id from keystone.role where name = 'Member')"
+    )
+
     table = "project"
 
     def __init__(self, args):
         super(Project, self).__init__(args)
         self.db_data = []
+        self.tenant_owner_data = []
+
+    def new_record(self):
+        return {
+            'id': None,
+            'display_name': None,
+            'organisation': None,
+            'description': None,
+            'enabled': None,
+            'personal': None,
+            'quota_instances': None,
+            'quota_vcpus': None,
+            'quota_memory': None,
+            'quota_volume_total': None,
+            'quota_volume_count': None,
+            'quota_snapshot': None,
+        }
 
     def extract(self):
         start = datetime.now()
         self._extract_no_last_update()
+        cursor = DB.remote_cursor()
+        cursor.execute(self.tenant_owner_query)
+        self.tenant_owner_data = cursor.fetchall()
+        cursor.execute(self.tenant_member_query)
+        self.tenant_member_data = cursor.fetchall()
         self.extract_time = datetime.now() - start
 
     def transform(self):
         start = datetime.now()
-        self.data = self.db_data
+        # we have the data we pulled from the project database, but we now
+        # need to merge in the tenant owner data. We iterate over the database
+        # results and pull in the tenant owner info and organisation stuff . .
+        #
+        # This is nowhere near perfect - there are a lot of logical holes. But
+        # we want this approximation for the moment.
+
+        def new_tenant_owner():
+            return {
+                'tenant': None,
+                'user': None,
+                'shib_attr': None,
+            }
+
+        # convert the raw database result set into something we can query
+        # by tenant id
+        def tenant_role_to_dict(data):
+            tdict = {}
+            for t in data:
+                id = t['tenant']
+                shib_attr = pickle.loads(t['shib_attr'])
+                to = new_tenant_owner()
+                to['tenant'] = id
+                to['user'] = t['user']
+                to['shib_attr'] = shib_attr
+                tdict[id] = to
+            return tdict
+
+        # Build the tenant owner dict
+        tod = tenant_role_to_dict(self.tenant_owner_data)
+        # and since we need to get useful information for personal trials . . .
+        tmd = tenant_role_to_dict(self.tenant_member_data)
+
+        # now we walk the main result set and fill it out in full
+        self.data = []
+        for tenant in self.db_data:
+            t = self.new_record()
+            for key in tenant.keys():
+                t[key] = tenant[key]
+            # personal trials do not have a TenantManager - leave these null
+            try:
+                shib_attr = tod[tenant['id']]['shib_attr']
+            except KeyError:
+                try:
+                    shib_attr = tmd[tenant['id']]['shib_attr']
+                except KeyError:
+                    self.data.append(t)
+                    continue
+            # this is a bit nasty, but it does two things: firstly, it picks
+            # up the two useful shibboleth attributes that we can use here
+            # namely 'organisation' and 'homeorganisation', of which
+            # organisation is the more useful since it's an actual name rather
+            # than a domain, and the sorted keys mean organisation overrides
+            # homeorganisation; and secondly it picks up the stupid stupid
+            # misspelling that's used by some organisations: they spelled it
+            # 'orginisation'. Stupid. I picked a substring that would match
+            # for US spellings, too, though I don't know if that's an issue
+            # here.
+            keys = shib_attr.keys()
+            keys.sort()
+            for k in keys:
+                if ('organi' in k or 'orgini' in k) and 'type' not in k:
+                    t['organisation'] = shib_attr[k]
+            # there are still some cases where there's no organisation set,
+            # even with all that. In those cases we use the email domain
+            if 'organisation' not in t:
+                t['organisation'] = shib_attr['mail'].split('@')[1]
+            self.data.append(t)
+
         self.transform_time = datetime.now() - start
 
     def load(self):
@@ -555,6 +684,7 @@ class User(Entity):
         self._load_simple()
         self.load_time = datetime.now() - start
 
+
 class Role(Entity):
     """
     Roles map between users and entities. This is a subset of the full range
@@ -582,7 +712,7 @@ class Role(Entity):
     }
 
     table = "role"
- 
+
     def __init__(self, args):
         super(Role, self).__init__(args)
         self.db_data = []
@@ -632,7 +762,7 @@ class Flavour(Entity):
     }
 
     table = "flavour"
- 
+
     def __init__(self, args):
         super(Flavour, self).__init__(args)
         self.db_data = []
@@ -698,7 +828,7 @@ class Instance(Entity):
     )
 
     table = "instance"
- 
+
     def __init__(self, args):
         super(Instance, self).__init__(args)
         self.db_data = []
@@ -721,9 +851,9 @@ class Instance(Entity):
         # the data should be ordered by created_at, so we start by taking the
         # created_at value and use that as the starting point.
         def date_to_day(date):
-             return datetime(date.year, 
-                             date.month, 
-                             date.day)
+            return datetime(date.year,
+                            date.month,
+                            date.day)
         hist_agg = {}
         if len(self.db_data) > 0:
             # create a list of records to be added to the historical_usate
@@ -764,7 +894,7 @@ class Instance(Entity):
                     key = day.strftime("%s")
                     hist_agg[key]['vcpus'] += instance['vcpus']
                     hist_agg[key]['memory'] += instance['memory']
-                    hist_agg[key]['local_storage'] += (instance['root'] 
+                    hist_agg[key]['local_storage'] += (instance['root']
                                                        + instance['ephemeral'])
                     day = day + timedelta(1)
             for key in hist_agg:
@@ -784,9 +914,8 @@ class Instance(Entity):
         cursor = DB.local_cursor()
         # necessary because it's entirely possible for a last_update query to
         # return no data
-        if len(self.hist_agg_data) > 0 and not self.dry_run:
-            cursor.executemany(self.hist_agg_query,
-                           self.hist_agg_data)
+        if len(self.hist_agg_data) > 0 or self.dry_run:
+            self._load_many(self.hist_agg_query, self.hist_agg_data)
             DB.local().commit()
             # note that we never /use/ this to determine whether to update or
             # not, this is for informational purposes only
@@ -833,7 +962,7 @@ class Volume(Entity):
     }
 
     table = "volume"
- 
+
     def __init__(self, args):
         super(Volume, self).__init__(args)
         self.db_data = []
@@ -901,4 +1030,3 @@ class Image(Entity):
         start = datetime.now()
         self._load_simple()
         self.load_time = datetime.now() - start
-
