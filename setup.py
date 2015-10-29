@@ -19,9 +19,6 @@ setup(
     long_description=(read("README.md")),
     packages=['common', 'entities'],
     scripts=['update-db.py'],
-    data_files=[
-        ('/etc/reporting-pollster', ['files/reporting.conf']),
-    ],
     install_requires=open('REQUIREMENTS.txt').read().splitlines()
 )
 
