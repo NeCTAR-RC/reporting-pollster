@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from setuptools import setup 
+from setuptools import setup, find_packages
 import os
 
 def read(*paths):
@@ -17,7 +17,7 @@ setup(
     license="Apache 2.0",
     description="OpenStack reporting pollster system",
     long_description=(read("README.md")),
-    packages=['common', 'entities'],
+    packages=find_packages(),
     scripts=['update-db.py'],
     install_requires=open('REQUIREMENTS.txt').read().splitlines()
 )

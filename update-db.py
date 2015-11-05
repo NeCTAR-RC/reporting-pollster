@@ -3,9 +3,9 @@
 # Database connection support
 #
 
-from common.config import Config
-from common.DB import DB
-from entities.entities import Entity
+from reporting.common.config import Config
+from reporting.common.DB import DB
+from reporting.entities.entities import Entity
 from datetime import datetime, timedelta
 import argparse
 

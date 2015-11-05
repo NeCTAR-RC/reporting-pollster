@@ -4,7 +4,7 @@
 #
 
 import mysql.connector
-from common.config import Config
+from reporting.common.config import Config
 
 class DB(object):
     """
