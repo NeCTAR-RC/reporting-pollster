@@ -4,7 +4,7 @@
 #
 
 import mysql.connector
-from reporting.common.config import Config
+from reporting_pollster.common.config import Config
 
 class DB(object):
     """

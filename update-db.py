@@ -3,9 +3,9 @@
 # Database connection support
 #
 
-from reporting.common.config import Config
-from reporting.common.DB import DB
-from reporting.entities.entities import Entity
+from reporting_pollster.common.config import Config
+from reporting_pollster.common.DB import DB
+from reporting_pollster.entities.entities import Entity
 from datetime import datetime, timedelta
 import argparse
 

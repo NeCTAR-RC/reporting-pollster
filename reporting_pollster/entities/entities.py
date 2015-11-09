@@ -19,8 +19,8 @@ import pickle
 from datetime import datetime
 from datetime import timedelta
 import novaclient.v2.client as nvclient
-from reporting.common.DB import DB
-from reporting.common import credentials
+from reporting_pollster.common.DB import DB
+from reporting_pollster.common import credentials
 import entities
 
 
