@@ -3,6 +3,7 @@
 from setuptools import setup, find_packages
 import os
 
+
 def read(*paths):
     """Build a file path from *paths* and return the contents."""
     with open(os.path.join(*paths), 'r') as f:
@@ -21,4 +22,3 @@ setup(
     scripts=['update-db.py'],
     install_requires=open('REQUIREMENTS.txt').read().splitlines()
 )
-

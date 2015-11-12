@@ -6,6 +6,7 @@
 import mysql.connector
 from reporting_pollster.common.config import Config
 
+
 class DB(object):
     """
     Wrap the database connections.
@@ -43,5 +44,3 @@ class DB(object):
         if not cls.local_conn:
             cls.local()
         return cls.local().cursor(dictionary=dictionary)
-
-

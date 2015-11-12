@@ -20,7 +20,7 @@ from datetime import datetime
 from datetime import timedelta
 import novaclient.v2.client as nvclient
 from reporting_pollster.common.DB import DB
-from reporting_pollster.common import credentials
+from reporting_pollster.common.config import Config
 import entities
 
 
@@ -299,7 +299,7 @@ class Aggregate(Entity):
         self.agg_data = []
         self.agg_host_data = []
         self.data = []
-        novacreds = credentials.get_nova_credentials()
+        novacreds = Config.get_nova()
         self.novaclient = nvclient.Client(**novacreds)
 
     def new_agg_record(self):
@@ -405,7 +405,7 @@ class Hypervisor(Entity):
         self.db_data = []
         self.api_data = None
         self.data = []
-        novacreds = credentials.get_nova_credentials()
+        novacreds = Config.get_nova()
         self.novaclient = nvclient.Client(**novacreds)
 
     # PUll all the data from whatever sources we need, and assemble them here

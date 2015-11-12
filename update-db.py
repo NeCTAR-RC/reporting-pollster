@@ -4,9 +4,7 @@
 #
 
 from reporting_pollster.common.config import Config
-from reporting_pollster.common.DB import DB
 from reporting_pollster.entities.entities import Entity
-from datetime import datetime, timedelta
 import argparse
 
 tables = [
@@ -61,7 +59,8 @@ def parse_args():
     parser.add_argument('--last-month', action='store_true', required=False,
                         help="update the last month's worth of data")
     parser.add_argument('-f', '--full-run', action='store_true',
-                        required=False, default=False, help="execute a full query/update run")
+                        required=False, default=False,
+                        help="execute a full query/update run")
     parser.add_argument('--debug', action='count', help="increase debug level")
     args = parser.parse_args()
     print args
@@ -71,7 +70,6 @@ def parse_args():
 def main():
     args = parse_args()
 
-    cfg = Config()
     if 'config_file' in args:
         Config.reload_config(args.config_file)
 

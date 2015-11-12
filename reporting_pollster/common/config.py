@@ -5,6 +5,7 @@
 import os.path
 import sys
 from ConfigParser import SafeConfigParser
+from reporting_pollster.common import credentials
 
 config_file = "./reporting.conf"
 
@@ -32,6 +33,7 @@ class Config(object):
     """
     remote = None
     local = None
+    nova = None
 
     def __init__(self):
         self.load_defaults()
@@ -52,13 +54,18 @@ class Config(object):
         if not parser.has_section('local'):
             print "No local database configuration - failing"
             sys.exit(1)
+        if not parser.has_section('nova') and cls.nova is None:
+            print "No nova credentials provided - failing"
+            sys.exit(1)
         cls.remote = {}
         cls.local = {}
+        cls.nova = {}
         for (name, value) in parser.items('remote'):
             cls.remote[name] = value
         for (name, value) in parser.items('local'):
             cls.local[name] = value
-
+        for (name, value) in parser.items('nova'):
+            cls.nova[name] = value
 
     @classmethod
     def load_config(cls, filename):
@@ -68,13 +75,19 @@ class Config(object):
 
     @classmethod
     def load_defaults(cls):
+        # pull credentials from the environment, but override with the config
+        # file
+        try:
+            cls.nova = credentials.get_nova_credentials()
+        except KeyError:
+            print "Loading nova credentials from environment failed"
         if os.path.isfile(config_file):
             cls.reload_config(config_file)
         else:
             print "loading in-built default configuration"
             cls.remote = remote
             cls.local = local
-
+            cls.nova = {}
 
     @classmethod
     def get_remote(cls):
@@ -87,3 +100,9 @@ class Config(object):
         if not cls.local:
             cls.load_config()
         return cls.local
+
+    @classmethod
+    def get_nova(cls):
+        if not cls.nova:
+            cls.load_config()
+        return cls.nova
