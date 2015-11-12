@@ -63,7 +63,6 @@ def parse_args():
                         help="execute a full query/update run")
     parser.add_argument('--debug', action='count', help="increase debug level")
     args = parser.parse_args()
-    print args
     return args
 
 
