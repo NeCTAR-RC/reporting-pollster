@@ -7,7 +7,7 @@ Standards-Version: 3.9.1
 
 Package: python-reporting-pollster
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}
+Depends: ${misc:Depends}, ${python:Depends}, python-mysql.connector (>= 2.0.4)
 Description: OpenStack reporting pollster system
  # reporting-pollster
  OpenStack Reporting Pollster
