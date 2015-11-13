@@ -3,6 +3,9 @@
 # Database connection support
 #
 
+import os
+import sys
+import signal
 from reporting_pollster.common.config import Config
 from reporting_pollster.entities.entities import Entity
 import time
@@ -69,8 +72,46 @@ def parse_args():
     parser.add_argument('--poll-period', action='store', required=False,
                         default=600, type=int,
                         help="Number of seconds between each polling run")
+    parser.add_argument('--pidfile', action='store', required=False,
+                        help="File to store PID info in")
     args = parser.parse_args()
     return args
+
+
+class Handler(object):
+
+    pidfile = None
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def create_pidfile(cls, pidfile="/var/run/reporting-pollster.pid"):
+        cls.pidfile = pidfile
+        if os.access(pidfile, os.F_OK):
+            print("PID file " + pidfile + " exists")
+            sys.exit(1)
+        with open(pidfile, 'w') as pf:
+            pf.write("%d" % (os.getpid()))
+
+    def term_handler(self, sig, frame):
+        if self.pidfile:
+            os.remove(self.pidfile)
+        else:
+            print("Could not delete pidfile")
+        sys.exit(0)
+
+    @classmethod
+    def cleanup_pidfile(cls, pidfile="/var/run/reporting-pollster.pid"):
+        if cls.pidfile:
+            os.remove(cls.pidfile)
+        elif os.access(pidfile, os.F_OK):
+            # we don't want to delete someone else's pidfile
+            with open(pidfile, 'r') as pf:
+                pid = int(pf.read())
+                if os.getpid() == pid:
+                    os.remove(pidfile)
+
 
 def polling_loop(args):
     while True:
@@ -85,13 +126,23 @@ def polling_loop(args):
         if remaining > 0:
             time.sleep(remaining)
 
+
 def main():
     args = parse_args()
 
     if 'config_file' in args:
         Config.reload_config(args.config_file)
 
-    polling_loop(args) 
+    # only do this if we're told to
+    if 'pidfile' in args:
+        handler = Handler()
+        signal.signal(signal.SIGINT, handler.term_handler)
+        signal.signal(signal.SIGTERM, handler.term_handler)
+        handler.create_pidfile(args.pidfile)
+
+    polling_loop(args)
 
 if __name__ == '__main__':
     main()
+    # in case we end up here
+    Handler.cleanup_pidfile()
