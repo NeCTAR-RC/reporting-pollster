@@ -19,6 +19,6 @@ setup(
     description="OpenStack reporting pollster system",
     long_description=(read("README.md")),
     packages=find_packages(),
-    scripts=['update-db.py'],
+    scripts=['reporting-pollster'],
     install_requires=open('REQUIREMENTS.txt').read().splitlines()
 )
