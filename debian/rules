@@ -6,3 +6,6 @@ export PYBUILD_NAME=reporting-pollster
 %:
 	dh $@ --with python2 --buildsystem=pybuild
 
+override_dh_installinit:
+	dh_installinit --name=$(PYBUILD_NAME)
+

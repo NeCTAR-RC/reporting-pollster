@@ -1,0 +1,1 @@
+DAEMON_ARGS="--config /etc/reporting-pollster/reporting.conf --full-update --quiet --poll --pidfile /var/run/reporting-pollster.pid"
