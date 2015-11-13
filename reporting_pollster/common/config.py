@@ -46,6 +46,7 @@ class Config(object):
             sys.exit(1)
         cls.remote = None
         cls.local = None
+        cls.nova = None
         parser = SafeConfigParser()
         parser.read(filename)
         if not parser.has_section('remote'):
@@ -69,7 +70,7 @@ class Config(object):
 
     @classmethod
     def load_config(cls, filename):
-        if cls.remote and cls.local:
+        if cls.remote and cls.local and cls.nova:
             return
         cls.reload_config(filename)
 
@@ -92,17 +93,17 @@ class Config(object):
     @classmethod
     def get_remote(cls):
         if not cls.remote:
-            cls.load_config()
+            cls.load_defaults()
         return cls.remote
 
     @classmethod
     def get_local(cls):
         if not cls.local:
-            cls.load_config()
+            cls.load_defaults()
         return cls.local
 
     @classmethod
     def get_nova(cls):
         if not cls.nova:
-            cls.load_config()
+            cls.load_defaults()
         return cls.nova
