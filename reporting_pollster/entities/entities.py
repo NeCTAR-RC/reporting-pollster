@@ -56,6 +56,10 @@ class Entity(object):
         if 'debug' in self.args:
             print msg
 
+    def _info(self, msg):
+        if not 'quiet' in self.args:
+            print msg
+
     @classmethod
     def from_table_name(cls, table, args):
         """
@@ -76,19 +80,18 @@ class Entity(object):
         return entity(args)
 
     def _extract_all(self):
-        self._debug("Extracting all from table " + self.table)
+        self._info("Extracting data for table " + self.table)
         cursor = DB.remote_cursor()
         cursor.execute(self.queries['query'])
         self.db_data = cursor.fetchall()
         self._debug("Rows returned: %d" % (cursor.rowcount))
 
     def _extract_dry_run(self):
-        print "Extracting data for " + self.table + " table"
-        if 'debug' in self.args:
-            print "Query: " + self.queries['query']
+        self._info("Extracting data for " + self.table + " table")
+        self._debug("Query: " + self.queries['query'])
 
     def _extract_all_last_update(self):
-        self._debug("Extracting all with last update from table " + self.table)
+        self._info("Extracting data for " + self.table + " table (last_update)")
         cursor = DB.remote_cursor()
         cursor.execute(self.queries['query_last_update'],
                        (self.last_update, self.last_update))
@@ -96,10 +99,9 @@ class Entity(object):
         self._debug("Rows returned: %d" % (cursor.rowcount))
 
     def _extract_dry_run_last_update(self):
-        print "Extracting data for " + self.table + " table (last update)"
-        if 'debug' in self.args:
-            query = self.queries['query_last_update']
-            print "Query: " + query % (self.last_update, self.last_update)
+        self._info("Extracting data for " + self.table + " table (last update)")
+        query = self.queries['query_last_update']
+        self._debug("Query: " + query % (self.last_update, self.last_update))
 
     def _extract_no_last_update(self):
         """
@@ -145,12 +147,11 @@ class Entity(object):
         raise NotImplementedError()
 
     def _load_dry_run(self):
-        print "Loading data for " + self.table + " table"
-        if 'debug' in self.args:
-            print "Query: " + self.queries['update']
+        self._info("Loading data for " + self.table + " table")
+        self._debug("Query: " + self.queries['update'])
 
     def _load(self):
-        self._debug("Loading data for " + self.table + " table")
+        self._info("Loading data for " + self.table + " table")
         cursor = DB.local_cursor()
         # necessary because it's entirely possible for a last_update query to
         # return no data
@@ -169,8 +170,7 @@ class Entity(object):
 
     def _load_many(self, query, data):
         if self.dry_run:
-            if 'debug' in self.args:
-                print "Special query: " + query
+            self._debug("Special query: " + query)
         else:
             cursor = DB.local_cursor()
             cursor.executemany(query, data)
@@ -178,8 +178,7 @@ class Entity(object):
     # seems a bit silly, but this captures the dry_run and debug logic
     def _run_sql_cursor(self, cursor, query):
         if self.dry_run:
-            if 'debug' in self.args:
-                print "Generic query: " + query
+            self._debug("Generic query: " + query)
         else:
             cursor.execute(query)
 
@@ -215,13 +214,13 @@ class Entity(object):
         if 'last_updated' in args:
             last_update = datetime.strptime(args.last_updated, "%Y%m%d")
         if 'last_day' in args:
-            print "last day"
+            self._debug("Update for last day")
             last_update = datetime.now() - timedelta(days=1)
         if 'last_week' in args:
-            print "last week"
+            self._debug("Update for last week")
             last_update = datetime.now() - timedelta(weeks=1)
         if 'last_month' in args:
-            print "last month"
+            self._debug("Update for last month")
             last_update = datetime.now() - timedelta(days=30)
         return last_update
 
@@ -258,8 +257,7 @@ class Entity(object):
         if not table:
             table = self.table
         if self.dry_run:
-            if 'debug' in self.args:
-                print "Setting last update on table " + table
+            self._debug("Setting last update on table " + table)
             return
 
         cursor = DB.local_cursor(dictionary=False)
@@ -325,7 +323,7 @@ class Aggregate(Entity):
         if not self.dry_run:
             self.api_data = self.novaclient.aggregates.list()
         else:
-            print "Extracting API data for the aggregate table"
+            self._info("Extracting API data for the aggregate table")
         self.extract_time = datetime.now() - start
 
     def transform(self):
@@ -433,7 +431,7 @@ class Hypervisor(Entity):
         if not self.dry_run:
             self.api_data = self.novaclient.hypervisors.list()
         else:
-            print "Extracting API data for the hypervisor table"
+            self._info("Extracting API data for the hypervisor table")
         self.extract_time = datetime.now() - start
 
     # ded simple until we have more than one data source

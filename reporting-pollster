@@ -63,6 +63,7 @@ def parse_args():
                         required=False, default=False,
                         help="execute a full query/update run")
     parser.add_argument('--debug', action='count', help="increase debug level")
+    parser.add_argument('--quiet', action='count', help="decrease debug level")
     parser.add_argument('--poll', action='store_true', required=False,
                         help="Run in continuous polling mode")
     parser.add_argument('--poll-period', action='store', required=False,
