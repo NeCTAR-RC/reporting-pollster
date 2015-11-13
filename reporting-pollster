@@ -5,6 +5,7 @@
 
 from reporting_pollster.common.config import Config
 from reporting_pollster.entities.entities import Entity
+import time
 import argparse
 
 tables = [
@@ -62,9 +63,26 @@ def parse_args():
                         required=False, default=False,
                         help="execute a full query/update run")
     parser.add_argument('--debug', action='count', help="increase debug level")
+    parser.add_argument('--poll', action='store_true', required=False,
+                        help="Run in continuous polling mode")
+    parser.add_argument('--poll-period', action='store', required=False,
+                        default=600,
+                        help="Number of seconds between each polling run")
     args = parser.parse_args()
     return args
 
+def polling_loop(args):
+    while True:
+        start = time.time()
+        for table in tables:
+            entity = Entity.from_table_name(table, args)
+            entity.process()
+        if not args.poll:
+            break
+        end = time.time()
+        remaining = (start + args.poll_period) - end
+        if remaining > 0:
+            time.sleep(remaining)
 
 def main():
     args = parse_args()
@@ -72,10 +90,7 @@ def main():
     if 'config_file' in args:
         Config.reload_config(args.config_file)
 
-    for table in tables:
-        entity = Entity.from_table_name(table, args)
-        entity.process()
-
+    polling_loop(args) 
 
 if __name__ == '__main__':
     main()
