@@ -295,7 +295,7 @@ class Aggregate(Entity):
 
     def __init__(self, args):
         super(Aggregate, self).__init__(args)
-        self.api_data = None
+        self.api_data = []
         self.agg_data = []
         self.agg_host_data = []
         self.data = []
@@ -322,7 +322,10 @@ class Aggregate(Entity):
     def extract(self):
         start = datetime.now()
         # NeCTAR requires hypervisors details from the API
-        self.api_data = self.novaclient.aggregates.list()
+        if not self.dry_run:
+            self.api_data = self.novaclient.aggregates.list()
+        else:
+            print "Extracting API data for the aggregate table"
         self.extract_time = datetime.now() - start
 
     def transform(self):
@@ -363,11 +366,12 @@ class Aggregate(Entity):
         # the additions, of course, but not the removals). So we need to delete
         # everything and start afresh with each update. To avoid people seeing
         # things in an odd state we need to wrap this in a transaction.
-        DB.local().start_transaction()
-        cursor = DB.local_cursor()
-        self._run_sql_cursor(cursor, self.aggregate_host_cleanup)
-        self._load_many(self.aggregate_host_query, self.agg_host_data)
-        DB.local().commit()
+        if not self.dry_run:
+            DB.local().start_transaction()
+            cursor = DB.local_cursor()
+            self._run_sql_cursor(cursor, self.aggregate_host_cleanup)
+            self._load_many(self.aggregate_host_query, self.agg_host_data)
+            DB.local().commit()
 
         self.load_time = datetime.now() - start
 
@@ -403,7 +407,7 @@ class Hypervisor(Entity):
     def __init__(self, args):
         super(Hypervisor, self).__init__(args)
         self.db_data = []
-        self.api_data = None
+        self.api_data = []
         self.data = []
         novacreds = Config.get_nova()
         self.novaclient = nvclient.Client(**novacreds)
@@ -426,8 +430,10 @@ class Hypervisor(Entity):
     def extract(self):
         start = datetime.now()
         # NeCTAR requires hypervisors details from the API
-        self.api_data = self.novaclient.hypervisors.list()
-        print len(self.api_data)
+        if not self.dry_run:
+            self.api_data = self.novaclient.hypervisors.list()
+        else:
+            print "Extracting API data for the hypervisor table"
         self.extract_time = datetime.now() - start
 
     # ded simple until we have more than one data source
