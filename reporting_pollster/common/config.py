@@ -6,6 +6,7 @@ import os.path
 import sys
 from ConfigParser import SafeConfigParser
 from reporting_pollster.common import credentials
+import novaclient.v2.client as nvclient
 
 config_file = "./reporting.conf"
 
@@ -26,6 +27,17 @@ local = {
     'port': 3306,
 }
 
+def verify_nova_creds(creds):
+    client = nvclient.Client(**creds)
+    # will return success quickly or fail quickly
+    print "Testing nova credentials"
+    try:
+        client.availability_zones.list()
+    except Exception as e:
+        print "Credentials don't appear to be valid"
+        print "Exception returned:", e
+        sys.exit(1)
+
 
 class Config(object):
     """
@@ -34,12 +46,14 @@ class Config(object):
     remote = None
     local = None
     nova = None
+    config_file = None
 
     def __init__(self):
         self.load_defaults()
 
     @classmethod
     def reload_config(cls, filename):
+        cls.config_file = filename
         print "Loading configuration from " + filename
         if not os.path.isfile(filename):
             print "Config file not found - failing"
@@ -67,6 +81,7 @@ class Config(object):
             cls.local[name] = value
         for (name, value) in parser.items('nova'):
             cls.nova[name] = value
+        verify_nova_creds(cls.nova)
 
     @classmethod
     def load_config(cls, filename):
@@ -76,19 +91,18 @@ class Config(object):
 
     @classmethod
     def load_defaults(cls):
-        # pull credentials from the environment, but override with the config
-        # file
-        try:
-            cls.nova = credentials.get_nova_credentials()
-        except KeyError:
-            print "Loading nova credentials from environment failed"
-        if os.path.isfile(config_file):
-            cls.reload_config(config_file)
+        if cls.config_file and os.path.isfile(cls.config_file):
+            cls.reload_config(cls.config_file)
         else:
             print "loading in-built default configuration"
             cls.remote = remote
             cls.local = local
-            cls.nova = {}
+            try:
+                cls.nova = credentials.get_nova_credentials()
+            except KeyError:
+                print "Loading nova credentials from environment failed"
+                sys.exit(1)
+        verify_nova_creds(cls.nova)
 
     @classmethod
     def get_remote(cls):
