@@ -634,7 +634,7 @@ class Project(Entity):
                     t['organisation'] = shib_attr[k]
             # there are still some cases where there's no organisation set,
             # even with all that. In those cases we use the email domain
-            if 'organisation' not in t:
+            if not t['organisation']:
                 t['organisation'] = shib_attr['mail'].split('@')[1]
             self.data.append(t)
 
