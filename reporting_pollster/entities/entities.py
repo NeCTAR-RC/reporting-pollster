@@ -57,7 +57,7 @@ class Entity(object):
             print msg
 
     def _info(self, msg):
-        if not 'quiet' in self.args:
+        if 'quiet' not in self.args:
             print msg
 
     @classmethod
@@ -91,7 +91,8 @@ class Entity(object):
         self._debug("Query: " + self.queries['query'])
 
     def _extract_all_last_update(self):
-        self._info("Extracting data for " + self.table + " table (last_update)")
+        self._info("Extracting data for " + self.table
+                   + " table (last_update)")
         cursor = DB.remote_cursor()
         cursor.execute(self.queries['query_last_update'],
                        (self.last_update, self.last_update))
@@ -99,7 +100,8 @@ class Entity(object):
         self._debug("Rows returned: %d" % (cursor.rowcount))
 
     def _extract_dry_run_last_update(self):
-        self._info("Extracting data for " + self.table + " table (last update)")
+        self._info("Extracting data for " + self.table
+                   + " table (last update)")
         query = self.queries['query_last_update']
         self._debug("Query: " + query % (self.last_update, self.last_update))
 
@@ -214,13 +216,13 @@ class Entity(object):
         if 'last_updated' in args:
             last_update = datetime.strptime(args.last_updated, "%Y%m%d")
         if 'last_day' in args:
-            self._debug("Update for last day")
+            cls._debug("Update for last day")
             last_update = datetime.now() - timedelta(days=1)
         if 'last_week' in args:
-            self._debug("Update for last week")
+            cls._debug("Update for last week")
             last_update = datetime.now() - timedelta(weeks=1)
         if 'last_month' in args:
-            self._debug("Update for last month")
+            cls._debug("Update for last month")
             last_update = datetime.now() - timedelta(days=30)
         return last_update
 

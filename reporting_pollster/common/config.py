@@ -27,6 +27,7 @@ local = {
     'port': 3306,
 }
 
+
 def verify_nova_creds(creds):
     client = nvclient.Client(**creds)
     # will return success quickly or fail quickly
