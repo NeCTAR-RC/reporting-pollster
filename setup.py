@@ -20,5 +20,6 @@ setup(
     long_description=(read("README.md")),
     packages=find_packages(),
     scripts=['reporting-pollster'],
-    install_requires=open('REQUIREMENTS.txt').read().splitlines()
+    install_requires=open('REQUIREMENTS.txt').read().splitlines(),
+    test_suite="tests.test_all"
 )
