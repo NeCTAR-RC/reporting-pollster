@@ -55,9 +55,9 @@ create table project (
         display_name varchar(64) comment "Human-readable display name",
         organisation varchar(255) comment "Organisation that runs this project",
         description text comment "Project description",
-        enabled boolean comment "If false, the project is not usable by users",
-        personal boolean comment "Is this a personal tenant",
-        has_instances boolean comment "Does this project have any instances?"
+        enabled boolean default false comment "If false, the project is not usable by users",
+        personal boolean default false comment "Is this a personal tenant",
+        has_instances boolean default false comment "Does this project have any instances?",
         quota_instances int comment "Maximum concurrent instances",
         quota_vcpus int comment "Maximum concurrent virtual processor cores",
         quota_memory int comment "Maximum memory concurrently allocated in MB",
@@ -75,7 +75,7 @@ create table user (
         name varchar(255) comment "User name",
         email varchar(255) comment "User email address",
         default_project varchar(36) comment "User default project",
-        enabled boolean,
+        enabled boolean default false,
         primary key (id)
 ) comment "Users";
 
@@ -101,8 +101,8 @@ create table flavour (
         memory int comment "Memory in MB",
         root int comment "Size of root disk in GB",
         ephemeral int comment "Size of ephemeral disk in GB",
-        public boolean comment "Is this flavour publically available",
-        active boolean comment "Is this flavour active",
+        public boolean default false comment "Is this flavour publically available",
+        active boolean default false comment "Is this flavour active",
         primary key (id),
         key flavour_uuid_key (uuid)
 ) comment "Types of virtual machine";
@@ -120,7 +120,7 @@ create table instance (
         created_by varchar(36) comment "id of user who created this instance",
         created datetime comment "Time instance was created",
         deleted datetime comment "Time instance was deleted",
-        active boolean comment "True if the instance is currently active",
+        active boolean default false comment "True if the instance is currently active",
         hypervisor varchar(255) comment "Hypervisor the instance is running on",
         availability_zone varchar(255) comment "Availability zone the instance is running in",
         primary key (id),
@@ -138,10 +138,10 @@ create table volume (
         size int(11) comment "Size in MB",
         created datetime comment "Volume created at",
         deleted datetime comment "Volume deleted at",
-        attached boolean comment "Volume attached or not",
+        attached boolean default false comment "Volume attached or not",
         instance_uuid varchar(36) comment "Instance the volume is attached to",
         availability_zone varchar(255) comment "Availability zone the volume exists in",
-        active boolean comment "Has this volume been deleted",
+        active boolean default false comment "Has this volume been deleted",
         primary key (id),
         key volume_project_id_key (project_id),
         key volume_instance_uuid_key (instance_uuid),
@@ -155,10 +155,10 @@ create table image (
         size int comment "Size of image in MB",
         -- TODO: It would be nice if status were an enum, and if the view layer could somehow see that.
         status varchar(30) comment "Current status of image",
-        public boolean comment "Is this image publically available",
+        public boolean default false comment "Is this image publically available",
         created datetime comment "Time image was created",
         deleted datetime comment "Time image was deleted",
-        active boolean comment "Has this image been deleted",
+        active boolean default false comment "Has this image been deleted",
         primary key (id),
         key image_project_id_key (project_id)
 ) comment "Operating system images";
@@ -177,7 +177,7 @@ create table aggregate (
         name varchar(255) comment "Name of this aggregate",
         created datetime comment "Time the aggregate was created",
         deleted datetime comment "Time the aggregate was deleted",
-        active boolean comment "Is this aggregate active",
+        active boolean default false comment "Is this aggregate active",
         primary key (id, availability_zone)
 ) comment "Aggregate definitions";
 
