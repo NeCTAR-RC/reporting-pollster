@@ -152,6 +152,14 @@ class Entity(object):
         self._info("Loading data for " + self.table + " table")
         self._debug("Query: " + self.queries['update'])
 
+    # Note: we really need to give some consideration to the use of
+    # transactions - right now we only have one case where the entity code
+    # uses a transaction above this level, but it's hard to know what other
+    # cases may come up as the processing gets more sophisticated. For now
+    # we're going to assume that the high level wrappers (load, _load_simple)
+    # have complete ownership of the transaction, but the lower stuff
+    # (_load_many and _run_sql_cursor) don't. Hence the user needs to make
+    # sure they handle transactions and commits themselves.
     def _load(self):
         self._info("Loading data for " + self.table + " table")
         cursor = DB.local_cursor()
@@ -161,7 +169,7 @@ class Entity(object):
             cursor.executemany(self.queries['update'],
                                self.data)
             DB.local().commit()
-        self._debug("Rows updated: %d" % (cursor.rowcount))
+            self._debug("Rows updated: %d" % (cursor.rowcount))
         self.set_last_update()
 
     def _load_simple(self):
@@ -176,8 +184,12 @@ class Entity(object):
         else:
             cursor = DB.local_cursor()
             cursor.executemany(query, data)
+            self._debug("Rows updated: %d" % (cursor.rowcount))
 
     # seems a bit silly, but this captures the dry_run and debug logic
+    #
+    # Note: since we don't own the cursor we don't do any cursor-specific
+    # debugging output
     def _run_sql_cursor(self, cursor, query):
         if self.dry_run:
             self._debug("Generic query: " + query)
@@ -471,6 +483,7 @@ class Project(Entity):
             "select distinct kp.id as id, kp.name as display_name, "
             "kp.description as description, kp.enabled as enabled, "
             "kp.name like 'pt-%' as personal, "
+            "false as has_instances, "
             "i.hard_limit as quota_instances, c.hard_limit as quota_vcpus, "
             "r.hard_limit as quota_memory, "
             "g.total_limit as quota_volume_total, "
@@ -833,12 +846,18 @@ class Instance(Entity):
         "values (%(day)s, %(vcpus)s, %(memory)s, %(local_storage)s)"
     )
 
+    has_instance_update_query = (
+        "update project set has_instances = true "
+        "where id = %(project_id)"
+    )
+
     table = "instance"
 
     def __init__(self, args):
         super(Instance, self).__init__(args)
         self.db_data = []
         self.hist_agg_data = []
+        self.has_instance_data = []
 
     def extract(self):
         start = datetime.now()
@@ -853,6 +872,11 @@ class Instance(Entity):
             'local_storage': 0
         }
 
+    def new_has_instance_update(self, project):
+        return {
+            'project_id': project
+        }
+
     def generate_hist_agg_data(self):
         # the data should be ordered by created_at, so we start by taking the
         # created_at value and use that as the starting point.
@@ -861,6 +885,7 @@ class Instance(Entity):
                             date.month,
                             date.day)
         hist_agg = {}
+        has_instance_data = []
         if len(self.db_data) > 0:
             # create a list of records to be added to the historical_usate
             # table
@@ -881,7 +906,7 @@ class Instance(Entity):
             # generate our storage dictionary, starting from the start date
             # we determined above
             day = orig_day
-            while day < datetime.now():
+            while day < date_to_day(datetime.now()):
                 hist_agg[day.strftime("%s")] = self.new_hist_agg(day)
                 day = day + timedelta(1)
             # Iterate over the list of instances, and update the
@@ -903,11 +928,16 @@ class Instance(Entity):
                     hist_agg[key]['local_storage'] += (instance['root']
                                                        + instance['ephemeral'])
                     day = day + timedelta(1)
-            for key in hist_agg:
+                if instance['project_id'] not in has_instance_data:
+                    has_instance_data.append(instance['project_id'])
+            keys = hist_agg.keys()
+            keys.sort()
+            for key in keys:
                 self.hist_agg_data.append(hist_agg[key])
-        # now we need to filter the data to find entries where the created_at
-        # value is less than the time we're interested in, and the deleted_at
-        # value is greater than
+            for proj in has_instance_data:
+                self.has_instance_data.append(
+                    self.new_has_instance_update(proj)
+                )
 
     def transform(self):
         start = datetime.now()
@@ -917,7 +947,6 @@ class Instance(Entity):
 
     def _load_hist_agg(self):
         self._debug("Loading data for historical_usage table")
-        cursor = DB.local_cursor()
         # necessary because it's entirely possible for a last_update query to
         # return no data
         if len(self.hist_agg_data) > 0 or self.dry_run:
@@ -926,13 +955,20 @@ class Instance(Entity):
             # note that we never /use/ this to determine whether to update or
             # not, this is for informational purposes only
             self.set_last_update(table="historical_usage")
-        self._debug("Rows updated: %d" % (cursor.rowcount))
+
+    def _load_has_instance_data(self):
+        self._debug("Updating project table with has instance data")
+        if len(self.has_instance_data) > 0 or self.dry_run:
+            self._load_many(self.has_instance_update_query,
+                            self.has_instance_data)
+            DB.local().commit()
 
     def load(self):
         start = datetime.now()
         # comment out for sanity while testing
         self._load_simple()
         self._load_hist_agg()
+        self._load_has_instance_data()
         self.load_time = datetime.now() - start
 
 

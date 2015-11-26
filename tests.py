@@ -2,8 +2,12 @@
 
 import unittest
 from mock import MagicMock, patch
-from reporting_pollster.entities.entities import Aggregate, Hypervisor, Project
+from reporting_pollster.entities.entities import Aggregate
+from reporting_pollster.entities.entities import Hypervisor
+from reporting_pollster.entities.entities import Project
+from reporting_pollster.entities.entities import Instance
 import pickle
+import datetime
 
 # What to test . . .
 #
@@ -129,6 +133,7 @@ proj_db_data = [
         'description': 'The first project',
         'enabled': True,
         'personal': False,
+        'has_instances': False,
         'quota_instances': 100,
         'quota_vcpus': 200,
         'quota_memory': 2048*1024*1024,
@@ -142,6 +147,7 @@ proj_db_data = [
         'description': 'The second project',
         'enabled': True,
         'personal': False,
+        'has_instances': False,
         'quota_instances': 50,
         'quota_vcpus': 100,
         'quota_memory': 2048*1024*1024,
@@ -155,12 +161,65 @@ proj_db_data = [
         'description': 'pt for someone',
         'enabled': True,
         'personal': True,
+        'has_instances': False,
         'quota_instances': 2,
         'quota_vcpus': 2,
         'quota_memory': 2048*1024,
         'quota_volume_total': 0,
         'quota_snapshots': 0,
         'quota_volume_count': 0,
+    },
+]
+
+
+instance_data = [
+    {
+        'project_id': 'uuid1',
+        'uuid': 'i_uuid1',
+        'name': 'instance 1',
+        'vcpus': 1,
+        'memory': 2048,
+        'root': 20,
+        'ephemeral': 50,
+        'flavour': 'flavour1',
+        'created_by': 'user1',
+        'created': datetime.datetime(2015, 11, 22, 13, 56),
+        'deleted': False,
+        'active': True,
+        'hypervisor': 'test03',
+        'availability_zone': 'test01'
+    },
+    {
+        'project_id': 'uuid3',
+        'uuid': 'i_uuid2',
+        'name': 'instance 2',
+        'vcpus': 1,
+        'memory': 2048,
+        'root': 20,
+        'ephemeral': 50,
+        'flavour': 'flavour1',
+        'created_by': 'user5',
+        'created': datetime.datetime(2015, 11, 23, 0, 1),
+        'deleted': False,
+        'active': True,
+        'hypervisor': 'test04',
+        'availability_zone': 'test01'
+    },
+    {
+        'project_id': 'uuid1',
+        'uuid': 'i_uuid3',
+        'name': 'instance 3',
+        'vcpus': 4,
+        'memory': 8096,
+        'root': 20,
+        'ephemeral': 150,
+        'flavour': 'flavour2',
+        'created_by': 'user1',
+        'created': datetime.datetime(2015, 11, 23, 5, 5),
+        'deleted': datetime.datetime(2015, 11, 24, 19, 40),
+        'active': False,
+        'hypervisor': 'test05',
+        'availability_zone': 'test01'
     },
 ]
 
@@ -305,3 +364,19 @@ class test_all(unittest.TestCase):
         # project 3 is a PT from somewhere.entirely.else
         self.assertEqual(proj.data[-1]['organisation'],
                          "somewhere.entirely.else")
+
+    def test_instance_transform(self):
+        inst = Instance(self.args)
+        inst.db_data = instance_data
+        inst.transform()
+        self.assertEqual(len(inst.has_instance_data), 2)
+        self.assertEqual(inst.has_instance_data[0]['project_id'], 'uuid1')
+        self.assertEqual(inst.hist_agg_data[0]['vcpus'], 1)
+        self.assertEqual(inst.hist_agg_data[1]['vcpus'], 6)
+        self.assertEqual(inst.hist_agg_data[2]['vcpus'], 2)
+        self.assertEqual(inst.hist_agg_data[0]['memory'], 2048)
+        self.assertEqual(inst.hist_agg_data[1]['memory'], 12192)
+        self.assertEqual(inst.hist_agg_data[2]['memory'], 4096)
+        self.assertEqual(inst.hist_agg_data[0]['local_storage'], 70)
+        self.assertEqual(inst.hist_agg_data[1]['local_storage'], 310)
+        self.assertEqual(inst.hist_agg_data[2]['local_storage'], 140)

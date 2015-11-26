@@ -57,13 +57,16 @@ create table project (
         description text comment "Project description",
         enabled boolean comment "If false, the project is not usable by users",
         personal boolean comment "Is this a personal tenant",
+        has_instances boolean comment "Does this project have any instances?"
         quota_instances int comment "Maximum concurrent instances",
         quota_vcpus int comment "Maximum concurrent virtual processor cores",
         quota_memory int comment "Maximum memory concurrently allocated in MB",
         quota_volume_total int comment "Maximum total size of storage volumes in GB",
         quota_snapshot int comment "Maximum number of volume snapshots",
         quota_volume_count int comment "Maximum number of concurrently allocated volumes",
-        primary key (id)
+        primary key (id),
+        key project_is_personal_key (personal),
+        key project_has_instances_key (has_instances)
 ) comment "Project resource quotas";
 
 -- Users 
