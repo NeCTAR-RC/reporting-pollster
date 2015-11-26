@@ -848,7 +848,7 @@ class Instance(Entity):
 
     has_instance_update_query = (
         "update project set has_instances = true "
-        "where id = %(project_id)"
+        "where id = %(project_id)s"
     )
 
     table = "instance"
