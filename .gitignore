@@ -3,3 +3,6 @@ build
 dist
 .project
 .pydevproject
+/.eggs/
+/reporting_pollster.egg-info/
+/.tox/

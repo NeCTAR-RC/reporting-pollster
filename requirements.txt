@@ -1,0 +1,4 @@
+python-novaclient>=2.22.0
+--allow-external mysql-connector-python
+mysql-connector-python>=2.0.4
+
