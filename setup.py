@@ -1,9 +1,15 @@
 from setuptools import setup, find_packages
 from pip.req import parse_requirements
+from pip.index import PackageFinder
 
 version = '0.1.0'
 
-requirements = parse_requirements('requirements.txt', session=False)
+finder = PackageFinder(find_links=[],
+                       session=False,
+                       index_urls=["http://pypi.python.org/simple/"])
+requirements = parse_requirements('requirements.txt',
+                                  session=False,
+                                  finder=finder)
 
 setup(name='reporting-pollster',
       version=version,
