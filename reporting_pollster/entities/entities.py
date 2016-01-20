@@ -222,19 +222,18 @@ class Entity(object):
 
         self._debug(self._get_timing())
 
-    @classmethod
-    def _get_default_last_update(cls, args):
+    def _get_default_last_update(self, args):
         last_update = None
         if 'last_updated' in args:
             last_update = datetime.strptime(args.last_updated, "%Y%m%d")
         if 'last_day' in args:
-            cls._debug("Update for last day")
+            self._debug("Update for last day")
             last_update = datetime.now() - timedelta(days=1)
         if 'last_week' in args:
-            cls._debug("Update for last week")
+            self._debug("Update for last week")
             last_update = datetime.now() - timedelta(weeks=1)
         if 'last_month' in args:
-            cls._debug("Update for last month")
+            self._debug("Update for last month")
             last_update = datetime.now() - timedelta(days=30)
         return last_update
 
