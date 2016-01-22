@@ -9,3 +9,5 @@ export PYBUILD_NAME=reporting-pollster
 override_dh_installinit:
 	dh_installinit --name=$(PYBUILD_NAME) --no-start
 
+override_dh_auto_test:
+	python ./tests.py --verbose
