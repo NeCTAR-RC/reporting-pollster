@@ -380,3 +380,6 @@ class test_all(unittest.TestCase):
         self.assertEqual(inst.hist_agg_data[0]['local_storage'], 70)
         self.assertEqual(inst.hist_agg_data[1]['local_storage'], 310)
         self.assertEqual(inst.hist_agg_data[2]['local_storage'], 140)
+
+if __name__ == '__main__':
+    unittest.main()
