@@ -14,6 +14,6 @@ setup(name='reporting-pollster',
       license='Apache 2.0',
       packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
       install_requires=[str(r.req) for r in requirements],
-      scripts=['reporting-pollster'],
+      scripts=['reporting-pollster', 'reporting-db-sync'],
       test_suite="tests.test_all"
       )

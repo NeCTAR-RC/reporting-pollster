@@ -1,0 +1,136 @@
+#!/bin/bash
+#
+# reporting-db-sync: setup and manage the database schema for the reporting
+# backend.
+#
+
+#set -x
+
+db_name=""
+db_user=""
+db_pass=""
+db_host="localhost"
+db_port="3306"
+schema="/usr/share/doc/python-reporting-pollster/reporting_schema_nectar.sql.gz"
+recreate=""
+
+usage() {
+        cat <<EOF
+$0 --db-name=<db> --db-user=<user> --db-pass=<password> [--db-host=<host>] [--db-port=<port>] [--schema=<schema file>] [--recreate] [--help]
+
+Manage the reporting backend database schema.
+        --db-name       Database name to connect to
+        --db-user       User to connect to the database as
+        --db-pass       Password to use for connection
+        --db-host       Database host
+        --db-port       Database port
+        --schema        Schema definition to use
+        --recreate      Recreate the schema (dropping the existing data and
+                        recreating the schema from scratch)
+        --help          Print this help text
+EOF
+}
+
+get_argument() {
+        echo $1 |cut -d '=' -f 2
+}
+
+if [ $# -eq 0 ]; then
+        usage
+        exit 0
+fi
+
+while [ $# -gt 0 ]; do
+        case $1 in
+                --db-name=*)
+                        db_name=$(get_argument $1)
+                        ;;
+                --db-user=*)
+                        db_user=$(get_argument $1)
+                        ;;
+                --db-pass=*)
+                        db_pass=$(get_argument $1)
+                        ;;
+                --db-host=*)
+                        db_host=$(get_argument $1)
+                        ;;
+                --db-port=*)
+                        db_port=$(get_argument $1)
+                        ;;
+                --schema=*)
+                        schema=$(get_argument $1)
+                        ;;
+                --recreate)
+                        recreate="yes"
+                        ;;
+                --help)
+                        usage
+                        exit 0
+                        ;;
+                *)
+                        echo -e "Unrecognised argument $1\n"
+                        usage
+                        exit 1
+                        ;;
+        esac
+        shift
+done
+
+error=0
+if [ -z "$db_name" ]; then
+        echo "Must specify database name"
+        error=1
+fi
+if [ -z "$db_user" ]; then
+        echo "Must specify database user"
+        error=1
+fi
+if [ -z "$db_pass" ]; then
+        echo "Must specify password for connection"
+        error=1
+fi
+if [ $error -gt 0 ]; then
+        echo ""
+        usage
+        exit 1
+fi
+
+# The process is pretty simple: if we're recreating the database we start by
+# dropping the database and recreating it (this will fail if we lack the
+# the necessary privileges). Then we simply run the specified schema file.
+
+if [ -n "$recreate" ]; then
+        echo "Not currently supported - please manually recreate the database and schema"
+        exit 0
+fi
+
+# assemble the command line
+command=`which mysql`
+command="$command --user=$db_user --password=$db_pass"
+if [ -n $db_host ]; then
+        command="$command --host=$db_host"
+fi
+if [ -n $db_port ]; then
+        command="$command --port=$db_port"
+fi
+command="$command $db_name"
+
+# check to see if the schema needs decompressing
+tmp_schema=`mktemp --tmpdir reporting-schema.XXXXXX`
+case $schema in
+        *.gz)
+                gunzip -c $schema >$tmp_schema
+                ;;
+        *.bz2)
+                bunzip2 -c $schema >$tmp_schema
+                ;;
+        *)
+                cat $schema >$tmp_schema
+                ;;
+esac
+
+# now run the command
+$command < $tmp_schema
+
+# cleanup
+rm -f $tmp_schema

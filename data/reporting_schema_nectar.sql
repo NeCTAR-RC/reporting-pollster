@@ -16,7 +16,7 @@
 -- use reporting;
 
 -- metadata - note that this part of the design may change
-create table metadata (
+create table if not exists metadata (
         table_name varchar(64), -- this should be an enum, but it's not worth doing that until we know what all the tables are
         last_update timestamp default current_timestamp on update current_timestamp,
         primary key (table_name)
@@ -34,7 +34,7 @@ create table metadata (
 -- Physical machines hosting running hypervisor software, aka compute nodes.
 --
 -- no interaction with other tables at present.
-create table hypervisor (
+create table if not exists hypervisor (
         id int(11) comment "Compute node identifier",
         availability_zone varchar(255) comment "Compute node availability zone",
         hostname varchar(255) comment "Compute node hostname",
@@ -50,7 +50,7 @@ create table hypervisor (
 
 -- Projects (otherwise known as tenants) group both users and resources such as instances.
 -- Projects are also the finest-grained entity which has resource quotas.
-create table project (
+create table if not exists project (
         id varchar(36) comment "Unique identifier",
         display_name varchar(64) comment "Human-readable display name",
         organisation varchar(255) comment "Organisation that runs this project",
@@ -69,8 +69,8 @@ create table project (
         key project_has_instances_key (has_instances)
 ) comment "Project resource quotas";
 
--- Users 
-create table user (
+-- Users
+create table if not exists user (
         id  varchar(64) comment "User unique identifier",
         name varchar(255) comment "User name",
         email varchar(255) comment "User email address",
@@ -81,7 +81,7 @@ create table user (
 
 -- user roles in projects. Note that this is a many to many relationship:
 -- a user can have roles in many projects, and a project may have many users.
-create table `role` (
+create table if not exists `role` (
         role varchar(255) comment "Role name",
         user varchar(64) comment "User ID this role is assigned to",
         project varchar(36) comment "Project ID the user is assigned this role in"
@@ -93,7 +93,7 @@ create table `role` (
 -- elsewhere, but it's /not/ unique. I didn't want to expose that fact,
 -- but there are conflicts otherwise that require me to select only non-deleted
 -- records if I stick to the 'uuid' as key.
-create table flavour (
+create table if not exists flavour (
         id int(11) comment "Flavour ID",
         uuid varchar(36) comment "Flavour UUID - not unique",
         name varchar(255) comment "Flavour name",
@@ -108,7 +108,7 @@ create table flavour (
 ) comment "Types of virtual machine";
 
 -- instances depend on projects and flavours
-create table instance (
+create table if not exists instance (
         project_id varchar(36) comment "Project UUID that owns this instance",
         id varchar(36) comment "Instance UUID",
         name varchar(64) comment "Instance name",
@@ -131,7 +131,7 @@ create table instance (
 
 -- Storage volumes independent of (but attachable to) virtual machines
 -- Volumes (and all the others, in fact) depend on the projects table
-create table volume (
+create table if not exists volume (
         id varchar(36) comment "Volume UUID",
         project_id varchar(36) comment "Project ID that owns this volume",
         display_name varchar(64) comment "Volume display name",
@@ -148,7 +148,7 @@ create table volume (
         key volume_az_key (availability_zone)
 ) comment "External storage volumes";
 
-create table image (
+create table if not exists image (
         id varchar(36) comment "Image UUID",
         project_id varchar(36) comment "Project ID that owns this image",
         name varchar(255) comment "Image display name",
@@ -171,7 +171,7 @@ create table image (
 --
 -- In addition, a lot of the interesting stuff is stored in a json 'metadata'
 -- field that is free-form. I'm ignoring this for the moment.
-create table aggregate (
+create table if not exists aggregate (
         id int(11),
         availability_zone varchar(255) comment "Availability zone this aggregate is defined in",
         name varchar(255) comment "Name of this aggregate",
@@ -188,7 +188,7 @@ create table aggregate (
 -- This is logically a simple relationship table, but we can't do it that
 -- way because this stuff is stored and presented differently between the
 -- hypervisor and aggregate logical OpenStack entities.
-create table aggregate_host (
+create table if not exists aggregate_host (
         id int(11),
         availability_zone varchar(255) comment "Availability zone this aggregate is defined on",
         host varchar(255) comment "Host name, same as first part of hypervisor.hostname",
@@ -204,9 +204,9 @@ create table aggregate_host (
 --          nova.aggregate_hosts join nova.aggregates on aggregate_hosts.aggregate_id = aggregates.id
 -- where
 --          aggregate_hosts.deleted = 0;
--- 
+--
 -- Malcolm's historical data . . .
-create table historical_usage (
+create table if not exists historical_usage (
         day date comment "One record should be added at midnight every day",
         vcpus int comment "Allocated number of vCPUs",
         memory int comment "Allocated memory in MB",
