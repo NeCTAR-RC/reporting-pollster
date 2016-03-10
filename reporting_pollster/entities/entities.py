@@ -43,6 +43,7 @@ class Entity(object):
 
     def __init__(self, args):
         self.args = args
+        self.dbs = Config.get_dbs()
         self.data = []
         self.dry_run = not self.args.full_run
         self.last_update = None
@@ -79,30 +80,45 @@ class Entity(object):
 
         return entity(args)
 
+    def _format_query(self, qname):
+        """
+        This is designed to handle the case where the database name is
+        non-standard. Database names in the relevant queries need to be
+        converted to format string entities like '{nova}' or '{keystone}' for
+        this to work.
+
+        Note that placeholders in the actual queries use either %s style
+        formatting, or %(name)s style - while these are both valid python
+        string formatting codes, they're in the queries because that's what
+        the mysql connector uses. The "".format() method is used here because
+        it doesn't clash with query placeholders.
+        """
+        return self.queries[qname].format(**self.dbs)
+
     def _extract_all(self):
         self._info("Extracting data for table " + self.table)
         cursor = DB.remote_cursor()
-        cursor.execute(self.queries['query'])
+        cursor.execute(self._format_query('query'))
         self.db_data = cursor.fetchall()
         self._debug("Rows returned: %d" % (cursor.rowcount))
 
     def _extract_dry_run(self):
         self._info("Extracting data for " + self.table + " table")
-        self._debug("Query: " + self.queries['query'])
+        self._debug("Query: " + self._format_query('query'))
 
     def _extract_all_last_update(self):
-        self._info("Extracting data for " + self.table
-                   + " table (last_update)")
+        self._info("Extracting data for " + self.table +
+                   " table (last_update)")
         cursor = DB.remote_cursor()
-        cursor.execute(self.queries['query_last_update'],
+        cursor.execute(self._format_query('query_last_update'),
                        (self.last_update, self.last_update))
         self.db_data = cursor.fetchall()
         self._debug("Rows returned: %d" % (cursor.rowcount))
 
     def _extract_dry_run_last_update(self):
-        self._info("Extracting data for " + self.table
-                   + " table (last update)")
-        query = self.queries['query_last_update']
+        self._info("Extracting data for " + self.table +
+                   " table (last update)")
+        query = self._format_query('query_last_update')
         self._debug("Query: " + query % (self.last_update, self.last_update))
 
     def _extract_no_last_update(self):
@@ -150,7 +166,7 @@ class Entity(object):
 
     def _load_dry_run(self):
         self._info("Loading data for " + self.table + " table")
-        self._debug("Query: " + self.queries['update'])
+        self._debug("Query: " + self._format_query('update'))
 
     # Note: we really need to give some consideration to the use of
     # transactions - right now we only have one case where the entity code
@@ -166,7 +182,7 @@ class Entity(object):
         # necessary because it's entirely possible for a last_update query to
         # return no data
         if len(self.data) > 0:
-            cursor.executemany(self.queries['update'],
+            cursor.executemany(self._format_query('update'),
                                self.data)
             DB.local().commit()
             self._debug("Rows updated: %d" % (cursor.rowcount))
@@ -179,11 +195,12 @@ class Entity(object):
             self._load()
 
     def _load_many(self, query, data):
+        q = self._format_query(query)
         if self.dry_run:
-            self._debug("Special query: " + query)
+            self._debug("Special query: " + q)
         else:
             cursor = DB.local_cursor()
-            cursor.executemany(query, data)
+            cursor.executemany(q, data)
             self._debug("Rows updated: %d" % (cursor.rowcount))
 
     # seems a bit silly, but this captures the dry_run and debug logic
@@ -191,10 +208,11 @@ class Entity(object):
     # Note: since we don't own the cursor we don't do any cursor-specific
     # debugging output
     def _run_sql_cursor(self, cursor, query):
+        q = self._format_query(query)
         if self.dry_run:
-            self._debug("Generic query: " + query)
+            self._debug("Generic query: " + q)
         else:
-            cursor.execute(query)
+            cursor.execute(q)
 
     def load(self):
         """
@@ -204,10 +222,10 @@ class Entity(object):
 
     def _get_timing(self):
         msg = (
-            "Process timing (%s):" % (self.table)
-            + "\textract: %f" % (self.extract_time.total_seconds())
-            + "\ttransform: %f" % (self.transform_time.total_seconds())
-            + "\tload: %f" % (self.load_time.total_seconds())
+            "Process timing (%s):" % (self.table) +
+            "\textract: %f" % (self.extract_time.total_seconds()) +
+            "\ttransform: %f" % (self.transform_time.total_seconds()) +
+            "\tload: %f" % (self.load_time.total_seconds())
         )
         return msg
 
@@ -397,11 +415,11 @@ class Hypervisor(Entity):
     queries = {
         'query': (
             "select id, 'nova' as availability_zone, hypervisor_hostname, "
-            "host_ip, vcpus, memory_mb, local_gb from nova.compute_nodes"
+            "host_ip, vcpus, memory_mb, local_gb from {nova}.compute_nodes"
         ),
         'query_last_update': (
             "select id, 'nova' as availability_zone, hypervisor_hostname, "
-            "host_ip, vcpus, memory_mb, local_gb from nova.compute_nodes "
+            "host_ip, vcpus, memory_mb, local_gb from {nova}.compute_nodes "
             "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
         'update': (
@@ -488,31 +506,31 @@ class Project(Entity):
             "g.total_limit as quota_volume_total, "
             "s.total_limit as quota_snapshots, "
             "v.total_limit as quota_volume_count "
-            "from keystone.project as kp left outer join "
-            "( select  *  from  nova.quotas where deleted = 0 "
+            "from {keystone}.project as kp left outer join "
+            "( select  *  from  {nova}.quotas where deleted = 0 "
             "and resource = 'ram' ) "
             "as r on kp.id = r.project_id left outer join "
-            "( select  *  from  nova.quotas where deleted = 0 "
+            "( select  *  from  {nova}.quotas where deleted = 0 "
             "and resource = 'instances' ) "
             "as i on kp.id = i.project_id left outer join "
-            "( select  *  from  nova.quotas where deleted = 0 "
+            "( select  *  from  {nova}.quotas where deleted = 0 "
             "and resource = 'cores' ) "
             "as c on kp.id = c.project_id left outer join "
             "( select project_id, "
             "sum(if(hard_limit>=0,hard_limit,0)) as total_limit "
-            "from cinder.quotas where deleted = 0 "
+            "from {cinder}.quotas where deleted = 0 "
             "and resource like 'gigabytes%' "
             "group by project_id ) "
             "as g on kp.id = g.project_id left outer join "
             "( select project_id, "
             "sum(if(hard_limit>=0,hard_limit,0)) as total_limit "
-            "from cinder.quotas where deleted = 0 "
+            "from {cinder}.quotas where deleted = 0 "
             "and resource like 'volumes%' "
             "group by project_id ) "
             "as v on kp.id = v.project_id left outer join "
             "( select project_id, "
             "sum(if(hard_limit>=0,hard_limit,0)) as total_limit "
-            "from cinder.quotas where deleted = 0 "
+            "from {cinder}.quotas where deleted = 0 "
             "and resource like 'snapshots%' "
             "group by project_id ) "
             "as s on kp.id = s.project_id"
@@ -528,25 +546,23 @@ class Project(Entity):
             "%(quota_volume_total)s, %(quota_snapshots)s, "
             "%(quota_volume_count)s)"
         ),
+        'tenant_owner': (
+            "select ka.target_id as tenant, ka.actor_id as user, "
+            "rc.shibboleth_attributes as shib_attr "
+            "from {keystone}.assignment as ka join {rcshibboleth}.user as rc "
+            "on ka.actor_id = rc.user_id "
+            "where ka.type = 'UserProject' and ka.role_id = "
+            "(select id from {keystone}.role where name = 'TenantManager')"
+        ),
+        'tenant_member': (
+            "select ka.target_id as tenant, ka.actor_id as user, "
+            "rc.shibboleth_attributes as shib_attr "
+            "from {keystone}.assignment as ka join {rcshibboleth}.user as rc "
+            "on ka.actor_id = rc.user_id "
+            "where ka.type = 'UserProject' and ka.role_id = "
+            "(select id from {keystone}.role where name = 'Member')"
+        ),
     }
-
-    tenant_owner_query = (
-        "select ka.target_id as tenant, ka.actor_id as user, "
-        "rc.shibboleth_attributes as shib_attr "
-        "from keystone.assignment as ka join rcshibboleth.user as rc "
-        "on ka.actor_id = rc.user_id "
-        "where ka.type = 'UserProject' and ka.role_id = "
-        "(select id from keystone.role where name = 'TenantManager')"
-    )
-
-    tenant_member_query = (
-        "select ka.target_id as tenant, ka.actor_id as user, "
-        "rc.shibboleth_attributes as shib_attr "
-        "from keystone.assignment as ka join rcshibboleth.user as rc "
-        "on ka.actor_id = rc.user_id "
-        "where ka.type = 'UserProject' and ka.role_id = "
-        "(select id from keystone.role where name = 'Member')"
-    )
 
     table = "project"
 
@@ -575,9 +591,9 @@ class Project(Entity):
         start = datetime.now()
         self._extract_no_last_update()
         cursor = DB.remote_cursor()
-        cursor.execute(self.tenant_owner_query)
+        cursor.execute(self._format_query('tenant_owner'))
         self.tenant_owner_data = cursor.fetchall()
-        cursor.execute(self.tenant_member_query)
+        cursor.execute(self._format_query('tenant_member'))
         self.tenant_member_data = cursor.fetchall()
         self.extract_time = datetime.now() - start
 
@@ -670,7 +686,7 @@ class User(Entity):
             "select ku.id as id, ru.displayname as name, ru.email as email, "
             "ku.default_project_id as default_project, ku.enabled as enabled "
             "from "
-            "keystone.user as ku join rcshibboleth.user as ru "
+            "{keystone}.user as ku join {rcshibboleth}.user as ru "
             "on ku.id = ru.user_id"
         ),
         'update': (
@@ -714,12 +730,12 @@ class Role(Entity):
         'query': (
             "select kr.name as role, ka.actor_id as user, "
             "ka.target_id as project "
-            "from keystone.assignment as ka join keystone.role as kr "
+            "from {keystone}.assignment as ka join {keystone}.role as kr "
             "on ka.role_id = kr.id "
             "where ka.type = 'UserProject' "
-            "AND EXISTS(select * from keystone.user ku "
+            "AND EXISTS(select * from {keystone}.user ku "
             "WHERE ku.id =  ka.actor_id) "
-            "AND EXISTS(select * from keystone.project kp "
+            "AND EXISTS(select * from {keystone}.project kp "
             "WHERE kp.id = ka.target_id)"
         ),
         'update': (
@@ -762,13 +778,13 @@ class Flavour(Entity):
             "select id, flavorid as uuid, name, vcpus, memory_mb as memory, "
             "root_gb as root, ephemeral_gb as ephemeral, is_public as public, "
             "not deleted as active "
-            "from nova.instance_types"
+            "from {nova}.instance_types"
         ),
         'query_last_update': (
             "select id, flavorid as uuid, name, vcpus, memory_mb as memory, "
             "root_gb as root, ephemeral_gb as ephemeral, is_public as public, "
             "not deleted as active "
-            "from nova.instance_types "
+            "from {nova}.instance_types "
             "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
         'update': (
@@ -814,7 +830,7 @@ class Instance(Entity):
             "created_at as created, deleted_at as deleted, "
             "if(deleted<>0,false,true) as active, host as hypervisor, "
             "availability_zone "
-            "from nova.instances order by created_at"
+            "from {nova}.instances order by created_at"
         ),
         'query_last_update': (
             "select project_id, uuid as id, display_name as name, vcpus, "
@@ -823,7 +839,7 @@ class Instance(Entity):
             "created_at as created, deleted_at as deleted, "
             "if(deleted<>0,false,true) as active, host as hypervisor, "
             "availability_zone "
-            "from nova.instances "
+            "from {nova}.instances "
             "where ifnull(deleted_at, now()) > %s or updated_at > %s "
             "order by created_at"
         ),
@@ -839,6 +855,8 @@ class Instance(Entity):
         ),
     }
 
+    # These are local queries, so they don't need to be run through
+    # _format_query()
     hist_agg_query = (
         "replace into historical_usage "
         "(day, vcpus, memory, local_storage) "
@@ -924,8 +942,8 @@ class Instance(Entity):
                     key = day.strftime("%s")
                     hist_agg[key]['vcpus'] += instance['vcpus']
                     hist_agg[key]['memory'] += instance['memory']
-                    hist_agg[key]['local_storage'] += (instance['root']
-                                                       + instance['ephemeral'])
+                    hist_agg[key]['local_storage'] += (instance['root'] +
+                                                       instance['ephemeral'])
                     day = day + timedelta(1)
                 if instance['project_id'] not in has_instance_data:
                     has_instance_data.append(instance['project_id'])
@@ -982,14 +1000,14 @@ class Volume(Entity):
             "created_at as created, deleted_at as deleted, "
             "if(attach_status='attached',true,false) as attached, "
             "instance_uuid, availability_zone, not deleted as active "
-            "from cinder.volumes "
+            "from {cinder}.volumes "
         ),
         'query_last_update': (
             "select id, project_id, display_name, size, "
             "created_at as created, deleted_at as deleted, "
             "if(attach_status='attached',true,false) as attached, "
             "instance_uuid, availability_zone, not deleted as active "
-            "from cinder.volumes "
+            "from {cinder}.volumes "
             "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
         'update': (
@@ -1034,13 +1052,13 @@ class Image(Entity):
             "select id, owner as project_id, name, size, status, "
             "is_public as public, created_at as created, "
             "deleted_at as deleted, not deleted as active "
-            "from glance.images"
+            "from {glance}.images"
         ),
         'query_last_update': (
             "select id, owner as project_id, name, size, status, "
             "is_public as public, created_at as created, "
             "deleted_at as deleted, not deleted as active "
-            "from glance.images "
+            "from {glance}.images "
             "where ifnull(deleted_at, now()) > %s or updated_at > %s"
         ),
         'update': (

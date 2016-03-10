@@ -27,6 +27,14 @@ local = {
     'port': 3306,
 }
 
+dbs = {
+    'keystone': 'keystone',
+    'nova': 'nova',
+    'cinder': 'cinder',
+    'glance': 'glance',
+    'rcshibboleth': 'rcshibboleth',
+}
+
 
 def verify_nova_creds(creds):
     client = nvclient.Client(**creds)
@@ -47,6 +55,7 @@ class Config(object):
     remote = None
     local = None
     nova = None
+    dbs = None
     config_file = None
 
     def __init__(self):
@@ -76,17 +85,24 @@ class Config(object):
         cls.remote = {}
         cls.local = {}
         cls.nova = {}
+        cls.dbs = {}
         for (name, value) in parser.items('remote'):
             cls.remote[name] = value
         for (name, value) in parser.items('local'):
             cls.local[name] = value
         for (name, value) in parser.items('nova'):
             cls.nova[name] = value
+        if not parser.has_section('databases'):
+            print "No database mapping defined - using default"
+            cls.dbs = dbs
+        else:
+            for (name, value) in parser.items('databases'):
+                cls.dbs[name] = value
         verify_nova_creds(cls.nova)
 
     @classmethod
     def load_config(cls, filename):
-        if cls.remote and cls.local and cls.nova:
+        if cls.remote and cls.local and cls.nova and cls.dbs:
             return
         cls.reload_config(filename)
 
@@ -98,6 +114,7 @@ class Config(object):
             print "loading in-built default configuration"
             cls.remote = remote
             cls.local = local
+            cls.dbs = dbs
             try:
                 cls.nova = credentials.get_nova_credentials()
             except KeyError:
@@ -122,3 +139,9 @@ class Config(object):
         if not cls.nova:
             cls.load_defaults()
         return cls.nova
+
+    @classmethod
+    def get_dbs(cls):
+        if not cls.dbs:
+            cls.load_defaults()
+        return cls.dbs

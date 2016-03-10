@@ -2,6 +2,7 @@
 
 import unittest
 from mock import MagicMock, patch
+from reporting_pollster.entities.entities import Entity
 from reporting_pollster.entities.entities import Aggregate
 from reporting_pollster.entities.entities import Hypervisor
 from reporting_pollster.entities.entities import Project
@@ -294,6 +295,19 @@ proj_tenant_member_data = [
 ]
 
 
+format_query_orig = (
+    "select one, two, three, four "
+    "from {nova}.test "
+    "where four = %s and three >= %s"
+    )
+
+format_query_correct = (
+    "select one, two, three, four "
+    "from not_nova.test "
+    "where four = %s and three >= %s"
+    )
+
+
 def create_mock_array(data):
     accum = []
     for i in data:
@@ -348,7 +362,11 @@ class test_all(unittest.TestCase):
         self.assertEqual(len(hyp.data), 5)
         self.assertEqual(hyp.data[0]['availability_zone'], 'test!test-1')
 
-    def test_project_transform(self):
+    @patch('novaclient.v2.client')
+    @patch('reporting_pollster.entities.entities.Config')
+    def test_project_transform(self, Config, nvclient):
+        Config.get_nova.return_value = {"Creds": "Nothing"}
+        nvclient.Client.return_value = "novaclient"
         proj = Project(self.args)
         proj.db_data = proj_db_data
         proj.tenant_owner_data = proj_tenant_owner_data
@@ -365,7 +383,11 @@ class test_all(unittest.TestCase):
         self.assertEqual(proj.data[-1]['organisation'],
                          "somewhere.entirely.else")
 
-    def test_instance_transform(self):
+    @patch('novaclient.v2.client')
+    @patch('reporting_pollster.entities.entities.Config')
+    def test_instance_transform(self, Config, nvclient):
+        Config.get_nova.return_value = {"Creds": "Nothing"}
+        nvclient.Client.return_value = "novaclient"
         inst = Instance(self.args)
         inst.db_data = instance_data
         inst.transform()
@@ -380,6 +402,17 @@ class test_all(unittest.TestCase):
         self.assertEqual(inst.hist_agg_data[0]['local_storage'], 70)
         self.assertEqual(inst.hist_agg_data[1]['local_storage'], 310)
         self.assertEqual(inst.hist_agg_data[2]['local_storage'], 140)
+
+    @patch('novaclient.v2.client')
+    @patch('reporting_pollster.entities.entities.Config')
+    def test_format_query(self, Config, nvclient):
+        Config.get_nova.return_value = {"Creds": "Nothing"}
+        Config.get_dbs.return_value = {"nova": "not_nova"}
+        nvclient.Client.return_value = "novaclient"
+        entity = Entity(self.args)
+        entity.queries = {"testing": format_query_orig}
+        self.assertEqual(entity._format_query('testing'), format_query_correct)
+
 
 if __name__ == '__main__':
     unittest.main()
