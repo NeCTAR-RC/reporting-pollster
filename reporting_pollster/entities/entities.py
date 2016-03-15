@@ -194,8 +194,8 @@ class Entity(object):
         else:
             self._load()
 
-    def _load_many(self, query, data):
-        q = self._format_query(query)
+    def _load_many(self, qname, data):
+        q = self._format_query(qname)
         if self.dry_run:
             self._debug("Special query: " + q)
         else:
@@ -207,8 +207,8 @@ class Entity(object):
     #
     # Note: since we don't own the cursor we don't do any cursor-specific
     # debugging output
-    def _run_sql_cursor(self, cursor, query):
-        q = self._format_query(query)
+    def _run_sql_cursor(self, cursor, qname):
+        q = self._format_query(qname)
         if self.dry_run:
             self._debug("Generic query: " + q)
         else:
@@ -304,21 +304,19 @@ class Aggregate(Entity):
 
     # this seems a bit silly, but it allows us to use the load_simple method.
     queries = {
-        'update':  (
+        'update': (
             "replace into aggregate (id, availability_zone, name, created, "
             "deleted, active) values (%(id)s, %(availability_zone)s, "
             "%(name)s, %(created)s, %(deleted)s, %(active)s)"
         ),
+        'aggregate_host_cleanup': (
+            "delete from aggregate_host"
+        ),
+        'aggregate_host': (
+            "replace into aggregate_host (id, availability_zone, host) "
+            "values (%(id)s, %(availability_zone)s, %(host)s)"
+        ),
     }
-
-    aggregate_host_cleanup = (
-        "delete from aggregate_host"
-    )
-
-    aggregate_host_query = (
-        "replace into aggregate_host (id, availability_zone, host) "
-        "values (%(id)s, %(availability_zone)s, %(host)s)"
-    )
 
     table = "aggregate"
 
@@ -398,8 +396,8 @@ class Aggregate(Entity):
         if not self.dry_run:
             DB.local().start_transaction()
             cursor = DB.local_cursor()
-            self._run_sql_cursor(cursor, self.aggregate_host_cleanup)
-            self._load_many(self.aggregate_host_query, self.agg_host_data)
+            self._run_sql_cursor(cursor, 'aggregate_host_cleanup')
+            self._load_many('aggregate_host', self.agg_host_data)
             DB.local().commit()
 
         self.load_time = datetime.now() - start
@@ -853,20 +851,16 @@ class Instance(Entity):
             "%(created)s, %(deleted)s, %(active)s, %(hypervisor)s, "
             "%(availability_zone)s)"
         ),
+        'hist_agg': (
+            "replace into historical_usage "
+            "(day, vcpus, memory, local_storage) "
+            "values (%(day)s, %(vcpus)s, %(memory)s, %(local_storage)s)"
+        ),
+        'has_instance_update': (
+            "update project set has_instances = true "
+            "where id = %(project_id)s"
+        ),
     }
-
-    # These are local queries, so they don't need to be run through
-    # _format_query()
-    hist_agg_query = (
-        "replace into historical_usage "
-        "(day, vcpus, memory, local_storage) "
-        "values (%(day)s, %(vcpus)s, %(memory)s, %(local_storage)s)"
-    )
-
-    has_instance_update_query = (
-        "update project set has_instances = true "
-        "where id = %(project_id)s"
-    )
 
     table = "instance"
 
@@ -967,7 +961,7 @@ class Instance(Entity):
         # necessary because it's entirely possible for a last_update query to
         # return no data
         if len(self.hist_agg_data) > 0 or self.dry_run:
-            self._load_many(self.hist_agg_query, self.hist_agg_data)
+            self._load_many('hist_agg', self.hist_agg_data)
             DB.local().commit()
             # note that we never /use/ this to determine whether to update or
             # not, this is for informational purposes only
@@ -976,7 +970,7 @@ class Instance(Entity):
     def _load_has_instance_data(self):
         self._debug("Updating project table with has instance data")
         if len(self.has_instance_data) > 0 or self.dry_run:
-            self._load_many(self.has_instance_update_query,
+            self._load_many('has_instance_update',
                             self.has_instance_data)
             DB.local().commit()
 
