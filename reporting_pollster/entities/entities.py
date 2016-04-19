@@ -990,19 +990,23 @@ class Volume(Entity):
     """
     queries = {
         'query': (
-            "select id, project_id, display_name, size, "
-            "created_at as created, deleted_at as deleted, "
-            "if(attach_status='attached',true,false) as attached, "
-            "instance_uuid, availability_zone, not deleted as active "
-            "from {cinder}.volumes "
+            "select distinct v.id, v.project_id, v.display_name, v.size, "
+            "v.created_at as created, v.deleted_at as deleted, "
+            "if(v.attach_status='attached',true,false) as attached, "
+            "a.instance_uuid, v.availability_zone, not v.deleted as active "
+            "from {cinder}.volumes as v left join "
+            "{cinder}.volume_attachment as a "
+            "on v.id = a.volume_id and a.deleted = 0"
         ),
         'query_last_update': (
-            "select id, project_id, display_name, size, "
-            "created_at as created, deleted_at as deleted, "
-            "if(attach_status='attached',true,false) as attached, "
-            "instance_uuid, availability_zone, not deleted as active "
-            "from {cinder}.volumes "
-            "where ifnull(deleted_at, now()) > %s or updated_at > %s"
+            "select distinct v.id, v.project_id, v.display_name, v.size, "
+            "v.created_at as created, v.deleted_at as deleted, "
+            "if(v.attach_status='attached',true,false) as attached, "
+            "a.instance_uuid, v.availability_zone, not v.deleted as active "
+            "from {cinder}.volumes as v left join "
+            "{cinder}.volume_attachment as a "
+            "on v.id = a.volume_id and a.deleted = 0 "
+            "where ifnull(v.deleted_at, now()) > %s or v.updated_at > %s"
         ),
         'update': (
             "replace into volume "
