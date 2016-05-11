@@ -41,7 +41,7 @@ def verify_nova_creds(creds):
     # will return success quickly or fail quickly
     print "Testing nova credentials"
     try:
-        client.availability_zones.list()
+        client.availability_zones.list(detailed=False)
     except Exception as e:
         print "Credentials don't appear to be valid"
         print "Exception returned:", e
