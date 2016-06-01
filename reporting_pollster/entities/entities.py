@@ -16,6 +16,7 @@
 # in-memory object.
 
 import pickle
+import logging
 from datetime import datetime
 from datetime import timedelta
 import novaclient.v2.client as nvclient
@@ -50,16 +51,6 @@ class Entity(object):
         self.extract_time = timedelta()
         self.transform_time = timedelta()
         self.load_time = timedelta()
-
-    # this really needs to be done properly with logging and stuff, but for
-    # now this will do
-    def _debug(self, msg):
-        if 'debug' in self.args:
-            print msg
-
-    def _info(self, msg):
-        if 'quiet' not in self.args:
-            print msg
 
     @classmethod
     def from_table_name(cls, table, args):
@@ -96,30 +87,30 @@ class Entity(object):
         return self.queries[qname].format(**self.dbs)
 
     def _extract_all(self):
-        self._info("Extracting data for table " + self.table)
+        logging.info("Extracting data for table %s", self.table)
         cursor = DB.remote_cursor()
         cursor.execute(self._format_query('query'))
         self.db_data = cursor.fetchall()
-        self._debug("Rows returned: %d" % (cursor.rowcount))
+        logging.debug("Rows returned: %d", cursor.rowcount)
 
     def _extract_dry_run(self):
-        self._info("Extracting data for " + self.table + " table")
-        self._debug("Query: " + self._format_query('query'))
+        logging.info("Extracting data for %s table", self.table)
+        logging.debug("Query: %s", self._format_query('query'))
 
     def _extract_all_last_update(self):
-        self._info("Extracting data for " + self.table +
-                   " table (last_update)")
+        logging.info("Extracting data for %s table (last_update)",
+                     self.table)
         cursor = DB.remote_cursor()
         cursor.execute(self._format_query('query_last_update'),
                        (self.last_update, self.last_update))
         self.db_data = cursor.fetchall()
-        self._debug("Rows returned: %d" % (cursor.rowcount))
+        logging.debug("Rows returned: %d", cursor.rowcount)
 
     def _extract_dry_run_last_update(self):
-        self._info("Extracting data for " + self.table +
-                   " table (last update)")
+        logging.info("Extracting data for table (last update)", self.table)
         query = self._format_query('query_last_update')
-        self._debug("Query: " + query % (self.last_update, self.last_update))
+        logging.debug("Query: %s",
+                      query % (self.last_update, self.last_update))
 
     def _extract_no_last_update(self):
         """
@@ -165,8 +156,8 @@ class Entity(object):
         raise NotImplementedError()
 
     def _load_dry_run(self):
-        self._info("Loading data for " + self.table + " table")
-        self._debug("Query: " + self._format_query('update'))
+        logging.info("Loading data for %s table", self.table)
+        logging.debug("Query: %s", self._format_query('update'))
 
     # Note: we really need to give some consideration to the use of
     # transactions - right now we only have one case where the entity code
@@ -177,7 +168,7 @@ class Entity(object):
     # (_load_many and _run_sql_cursor) don't. Hence the user needs to make
     # sure they handle transactions and commits themselves.
     def _load(self):
-        self._info("Loading data for " + self.table + " table")
+        logging.info("Loading data for %s table", self.table)
         cursor = DB.local_cursor()
         # necessary because it's entirely possible for a last_update query to
         # return no data
@@ -185,7 +176,7 @@ class Entity(object):
             cursor.executemany(self._format_query('update'),
                                self.data)
             DB.local().commit()
-            self._debug("Rows updated: %d" % (cursor.rowcount))
+            logging.debug("Rows updated: %d", cursor.rowcount)
         self.set_last_update()
 
     def _load_simple(self):
@@ -197,11 +188,11 @@ class Entity(object):
     def _load_many(self, qname, data):
         q = self._format_query(qname)
         if self.dry_run:
-            self._debug("Special query: " + q)
+            logging.debug("Special query: %s", q)
         else:
             cursor = DB.local_cursor()
             cursor.executemany(q, data)
-            self._debug("Rows updated: %d" % (cursor.rowcount))
+            logging.debug("Rows updated: %d", cursor.rowcount)
 
     # seems a bit silly, but this captures the dry_run and debug logic
     #
@@ -210,7 +201,7 @@ class Entity(object):
     def _run_sql_cursor(self, cursor, qname):
         q = self._format_query(qname)
         if self.dry_run:
-            self._debug("Generic query: " + q)
+            logging.debug("Generic query: %s", q)
         else:
             cursor.execute(q)
 
@@ -233,25 +224,25 @@ class Entity(object):
         """
         Wrapper for the extract/load loop
         """
-        self._debug("Processing table " + self.table)
+        logging.debug("Processing table %s", self.table)
         self.extract()
         self.transform()
         self.load()
 
-        self._debug(self._get_timing())
+        logging.debug(self._get_timing())
 
     def _get_default_last_update(self, args):
         last_update = None
         if 'last_updated' in args:
             last_update = datetime.strptime(args.last_updated, "%Y%m%d")
         if 'last_day' in args:
-            self._debug("Update for last day")
+            logging.debug("Update for last day")
             last_update = datetime.now() - timedelta(days=1)
         if 'last_week' in args:
-            self._debug("Update for last week")
+            logging.debug("Update for last week")
             last_update = datetime.now() - timedelta(weeks=1)
         if 'last_month' in args:
-            self._debug("Update for last month")
+            logging.debug("Update for last month")
             last_update = datetime.now() - timedelta(days=30)
         return last_update
 
@@ -276,9 +267,9 @@ class Entity(object):
         if not last_update:
             last_update = self._get_last_update(table)
         if not last_update:
-            self._debug("No last update value available")
+            logging.debug("No last update value available")
         else:
-            self._debug("Last update: %s" % (last_update.isoformat()))
+            logging.debug("Last update: %s", last_update.isoformat())
         return last_update
 
     def set_last_update(self, table=None):
@@ -288,7 +279,7 @@ class Entity(object):
         if not table:
             table = self.table
         if self.dry_run:
-            self._debug("Setting last update on table " + table)
+            logging.debug("Setting last update on table %s", table)
             return
 
         cursor = DB.local_cursor(dictionary=False)
@@ -352,7 +343,7 @@ class Aggregate(Entity):
         if not self.dry_run:
             self.api_data = self.novaclient.aggregates.list()
         else:
-            self._info("Extracting API data for the aggregate table")
+            logging.info("Extracting API data for the aggregate table")
         self.extract_time = datetime.now() - start
 
     def transform(self):
@@ -460,7 +451,7 @@ class Hypervisor(Entity):
         if not self.dry_run:
             self.api_data = self.novaclient.hypervisors.list()
         else:
-            self._info("Extracting API data for the hypervisor table")
+            logging.info("Extracting API data for the hypervisor table")
         self.extract_time = datetime.now() - start
 
     # ded simple until we have more than one data source
@@ -957,7 +948,7 @@ class Instance(Entity):
         self.transform_time = datetime.now() - start
 
     def _load_hist_agg(self):
-        self._debug("Loading data for historical_usage table")
+        logging.debug("Loading data for historical_usage table")
         # necessary because it's entirely possible for a last_update query to
         # return no data
         if len(self.hist_agg_data) > 0 or self.dry_run:
@@ -968,7 +959,7 @@ class Instance(Entity):
             self.set_last_update(table="historical_usage")
 
     def _load_has_instance_data(self):
-        self._debug("Updating project table with has instance data")
+        logging.debug("Updating project table with has instance data")
         if len(self.has_instance_data) > 0 or self.dry_run:
             self._load_many('has_instance_update',
                             self.has_instance_data)

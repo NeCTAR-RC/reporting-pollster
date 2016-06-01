@@ -8,7 +8,9 @@ import sys
 import signal
 from reporting_pollster.common.config import Config
 from reporting_pollster.entities.entities import Entity
+from novaclient.exceptions import ClientException
 import time
+import logging
 import argparse
 
 tables = [
@@ -49,6 +51,11 @@ def parse_args():
     parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
     parser.add_argument('-c', '--config-file', action='store',
                         required=False, help='specify config file')
+    parser.add_argument('--logfile', action='store', required=False,
+                        help='specify logfile',
+                        default='/var/log/reporting-pollster.log')
+    parser.add_argument('--loglevel', action='store', required=False,
+                        help='specify log level', default='warning')
     parser.add_argument('--force-update', action='store_true', required=False,
                         help="ignore last update time and force a full update")
     parser.add_argument('--last-updated', action='store',
@@ -89,7 +96,7 @@ class Handler(object):
     def create_pidfile(cls, pidfile="/var/run/reporting-pollster.pid"):
         cls.pidfile = pidfile
         if os.access(pidfile, os.F_OK):
-            print("PID file " + pidfile + " exists")
+            logging.critical("PID file %s exists", pidfile)
             sys.exit(1)
         with open(pidfile, 'w') as pf:
             pf.write("%d" % (os.getpid()))
@@ -98,7 +105,7 @@ class Handler(object):
         if self.pidfile:
             os.remove(self.pidfile)
         else:
-            print("Could not delete pidfile")
+            logging.info("Could not delete pidfile")
         sys.exit(0)
 
     @classmethod
@@ -115,13 +122,34 @@ class Handler(object):
 
 def polling_loop(args):
     while True:
+        logging.info("Starting polling loop at %s",
+                      time.strftime("%Y-%m-%d %X %Z",
+                                    time.localtime()))
         start = time.time()
-        for table in tables:
-            entity = Entity.from_table_name(table, args)
-            entity.process()
-        if 'poll' not in args or not args.poll:
-            break
+        try:
+            for table in tables:
+                entity = Entity.from_table_name(table, args)
+                entity.process()
+            if 'poll' not in args or not args.poll:
+                break
+        # in this context a nova ClientException is almost certainly a
+        # transient error, so handle this explicitly
+        except ClientException as e:
+            logging.warning("Nova client exception received: %s",
+                            repr(e))
+        # capturing all other exceptions makes me uncomfortable, but it's
+        # (arguably) better than simply falling over.
+        #
+        # The exceptions are logged, and in most cases will represent a
+        # programming error and hence are logged as errors (not critical,
+        # since we can continue despite the error (we hope)).
+        except Exception as e:
+            logging.error("Unknown exception received: %s",
+                             repr(e))
         end = time.time()
+        logging.info("Finished polling loop at %s",
+                      time.strftime("%Y-%m-%d %X %Z",
+                                    time.localtime()))
         remaining = (start + args.poll_period) - end
         if remaining > 0:
             time.sleep(remaining)
@@ -130,17 +158,39 @@ def polling_loop(args):
 def main():
     args = parse_args()
 
+    loglevel = getattr(logging, args.loglevel.upper())
+    log_config = {
+        'format': "%(asctime)s %(levelname)s: %(message)s",
+        'datefmt': '%Y-%m-%d %X',
+        'filename': args.logfile,
+        'level': loglevel,
+    }
+    # send output to stdout rather than the logfile
+    if 'debug' in args:
+        del log_config['filename']
+        log_config['level'] = logging.DEBUG
+
+    # force the log level to something quiet
+    if 'quiet' in args:
+        log_config['level'] = logging.WARNING
+
+    logging.basicConfig(**log_config)
     if 'config_file' in args:
+        logging.info("Loading config from %s", args.config_file)
         Config.reload_config(args.config_file)
 
     # only do this if we're told to
     if 'pidfile' in args:
+        logging.debug("Setting signal handlers")
         handler = Handler()
         signal.signal(signal.SIGINT, handler.term_handler)
         signal.signal(signal.SIGTERM, handler.term_handler)
+        logging.debug("Creating pidfile")
         handler.create_pidfile(args.pidfile)
 
     polling_loop(args)
+
+    logging.info("Finished polling - exiting")
 
 if __name__ == '__main__':
     main()

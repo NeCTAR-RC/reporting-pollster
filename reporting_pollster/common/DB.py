@@ -3,6 +3,7 @@
 # cursor factory functions
 #
 
+import logging
 import mysql.connector
 from reporting_pollster.common.config import Config
 
@@ -22,7 +23,8 @@ class DB(object):
         if not cls.remote_conn:
             cls.remote_creds = Config.get_remote()
             cls.remote_conn = mysql.connector.connect(**cls.remote_creds)
-            print "Remote server version:", cls.remote_conn.get_server_info()
+            logging.debug("Remote server version: %s",
+                          cls.remote_conn.get_server_info())
         return cls.remote_conn
 
     @classmethod
@@ -36,7 +38,8 @@ class DB(object):
         if not cls.local_conn:
             cls.local_creds = Config.get_local()
             cls.local_conn = mysql.connector.connect(**cls.local_creds)
-            print "Local server version:", cls.local_conn.get_server_info()
+            logging.debug("Local server version: %s",
+                          cls.local_conn.get_server_info())
         return cls.local_conn
 
     @classmethod

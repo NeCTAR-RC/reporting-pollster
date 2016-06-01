@@ -4,6 +4,7 @@
 
 import os.path
 import sys
+import logging
 from ConfigParser import SafeConfigParser
 from reporting_pollster.common import credentials
 import novaclient.v2.client as nvclient
@@ -39,12 +40,12 @@ dbs = {
 def verify_nova_creds(creds):
     client = nvclient.Client(**creds)
     # will return success quickly or fail quickly
-    print "Testing nova credentials"
+    logging.debug("Testing nova credentials")
     try:
-        client.availability_zones.list(detailed=False)
+        client.availability_zones.list()
     except Exception as e:
-        print "Credentials don't appear to be valid"
-        print "Exception returned:", e
+        logging.critical("Credentials don't appear to be valid")
+        logging.critical("Exception returned: %s", e.message)
         sys.exit(1)
 
 
@@ -64,9 +65,9 @@ class Config(object):
     @classmethod
     def reload_config(cls, filename):
         cls.config_file = filename
-        print "Loading configuration from " + filename
+        logging.info("Loading configuration from %s", filename)
         if not os.path.isfile(filename):
-            print "Config file not found - failing"
+            logging.critical("Configuration file not found - failing")
             sys.exit(1)
         cls.remote = None
         cls.local = None
@@ -74,13 +75,13 @@ class Config(object):
         parser = SafeConfigParser()
         parser.read(filename)
         if not parser.has_section('remote'):
-            print "No remote database configuration - failing"
+            logging.critical("No remote database configuration - failing")
             sys.exit(1)
         if not parser.has_section('local'):
-            print "No local database configuration - failing"
+            logging.critical("No local database configuration - failing")
             sys.exit(1)
         if not parser.has_section('nova') and cls.nova is None:
-            print "No nova credentials provided - failing"
+            logging.critical("No nova credentials provided - failing")
             sys.exit(1)
         cls.remote = {}
         cls.local = {}
@@ -93,7 +94,7 @@ class Config(object):
         for (name, value) in parser.items('nova'):
             cls.nova[name] = value
         if not parser.has_section('databases'):
-            print "No database mapping defined - using default"
+            logging.info("No database mapping defined - using default")
             cls.dbs = dbs
         else:
             for (name, value) in parser.items('databases'):
@@ -111,14 +112,16 @@ class Config(object):
         if cls.config_file and os.path.isfile(cls.config_file):
             cls.reload_config(cls.config_file)
         else:
-            print "loading in-built default configuration"
+            logging.debug("Loading in-build default configuration")
             cls.remote = remote
             cls.local = local
             cls.dbs = dbs
             try:
                 cls.nova = credentials.get_nova_credentials()
             except KeyError:
-                print "Loading nova credentials from environment failed"
+                logging.critical(
+                    "Loading nova credentials from environment failed"
+                )
                 sys.exit(1)
         verify_nova_creds(cls.nova)
 
