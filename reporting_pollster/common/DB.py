@@ -47,3 +47,8 @@ class DB(object):
         if not cls.local_conn:
             cls.local()
         return cls.local().cursor(dictionary=dictionary)
+
+    @classmethod
+    def invalidate(cls):
+        cls.local_conn = None
+        cls.remote_conn = None

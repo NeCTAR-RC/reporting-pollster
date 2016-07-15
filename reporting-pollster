@@ -7,8 +7,10 @@ import os
 import sys
 import signal
 from reporting_pollster.common.config import Config
+from reporting_pollster.common.DB import DB
 from reporting_pollster.entities.entities import Entity
 from novaclient.exceptions import ClientException
+from mysql.connector.errors import OperationalError
 import time
 import logging
 import argparse
@@ -137,6 +139,15 @@ def polling_loop(args):
         except ClientException as e:
             logging.warning("Nova client exception received: %s",
                             repr(e))
+
+        # capture database connectivity errors.
+        #
+        # we simply toss the existing connection objects rather than try
+        # to reconnect - it's much simpler
+        except OperationalError as e:
+            logging.warning("Lost Database Connection: %s", repr(e))
+            DB.invalidate()
+
         # capturing all other exceptions makes me uncomfortable, but it's
         # (arguably) better than simply falling over.
         #
