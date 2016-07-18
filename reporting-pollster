@@ -125,8 +125,8 @@ class Handler(object):
 def polling_loop(args):
     while True:
         logging.info("Starting polling loop at %s",
-                      time.strftime("%Y-%m-%d %X %Z",
-                                    time.localtime()))
+                     time.strftime("%Y-%m-%d %X %Z",
+                                   time.localtime()))
         start = time.time()
         try:
             for table in tables:
@@ -155,12 +155,11 @@ def polling_loop(args):
         # programming error and hence are logged as errors (not critical,
         # since we can continue despite the error (we hope)).
         except Exception as e:
-            logging.error("Unknown exception received: %s",
-                             repr(e))
+            logging.error("Unknown exception received: %s", repr(e))
         end = time.time()
         logging.info("Finished polling loop at %s",
-                      time.strftime("%Y-%m-%d %X %Z",
-                                    time.localtime()))
+                     time.strftime("%Y-%m-%d %X %Z",
+                                   time.localtime()))
         remaining = (start + args.poll_period) - end
         if remaining > 0:
             time.sleep(remaining)
