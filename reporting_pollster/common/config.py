@@ -7,7 +7,7 @@ import sys
 import logging
 from ConfigParser import SafeConfigParser
 from reporting_pollster.common import credentials
-import novaclient.v2.client as nvclient
+from novaclient import client as nvclient
 
 config_file = "./reporting.conf"
 
@@ -37,14 +37,13 @@ dbs = {
 }
 
 
-def verify_nova_creds(creds):
-    client = nvclient.Client(**creds)
+def verify_nova_creds(nova_version, creds):
+    client = nvclient.Client(nova_version, **creds)
     # will return success quickly or fail quickly
     logging.debug("Testing nova credentials")
     try:
         client.availability_zones.list()
     except Exception as e:
-        logging.critical("Credentials don't appear to be valid")
         logging.critical("Exception returned: %s", e.message)
         sys.exit(1)
 
@@ -56,6 +55,7 @@ class Config(object):
     remote = None
     local = None
     nova = None
+    nova_api_version = '2'
     dbs = None
     config_file = None
 
@@ -93,13 +93,14 @@ class Config(object):
             cls.local[name] = value
         for (name, value) in parser.items('nova'):
             cls.nova[name] = value
+        cls.extract_nova_version()
         if not parser.has_section('databases'):
             logging.info("No database mapping defined - using default")
             cls.dbs = dbs
         else:
             for (name, value) in parser.items('databases'):
                 cls.dbs[name] = value
-        verify_nova_creds(cls.nova)
+        verify_nova_creds(cls.nova_api_version, cls.nova)
 
     @classmethod
     def load_config(cls, filename):
@@ -118,12 +119,19 @@ class Config(object):
             cls.dbs = dbs
             try:
                 cls.nova = credentials.get_nova_credentials()
+                cls.extract_nova_version()
             except KeyError:
                 logging.critical(
                     "Loading nova credentials from environment failed"
                 )
                 sys.exit(1)
-        verify_nova_creds(cls.nova)
+        verify_nova_creds(cls.nova_api_version, cls.nova)
+
+    @classmethod
+    def extract_nova_version(cls):
+        if cls.nova['version']:
+            cls.nova_api_version = cls.nova['version']
+            del cls.nova['version']
 
     @classmethod
     def get_remote(cls):
@@ -142,6 +150,15 @@ class Config(object):
         if not cls.nova:
             cls.load_defaults()
         return cls.nova
+
+    @classmethod
+    def get_nova_api_version(cls):
+        if not cls.nova:
+            # is read from the nova section, so if nova is not loaded we
+            # need to make sure there won't be a clash if it defines a
+            # different value to the default
+            cls.load_defaults()
+        return cls.nova_api_version
 
     @classmethod
     def get_dbs(cls):

@@ -334,10 +334,11 @@ class test_all(unittest.TestCase):
     # Input is the Aggregate.api_data array, which is an array of
     # novaclient.v2.aggregates.Aggregate instances. We're using mock to
     # emulate a small chunk of these.
-    @patch('novaclient.v2.client')
+    @patch('novaclient.client')
     @patch('reporting_pollster.entities.entities.Config')
     def test_aggregate_transform(self, Config, nvclient):
         Config.get_nova.return_value = {"Creds": "nothing"}
+        Config.get_nova_api_version.return_value = '2'
         nvclient.Client.return_value = "novaclient"
         agg = Aggregate(self.args)
         agg.api_data = create_mock_array(aggregate_data)
@@ -351,10 +352,11 @@ class test_all(unittest.TestCase):
                          'availability_zone': 'test!test-1',
                          'host': 'test1'})
 
-    @patch('novaclient.v2.client')
+    @patch('novaclient.client')
     @patch('reporting_pollster.entities.entities.Config')
     def test_hypervisor_transform(self, Config, nvclient):
         Config.get_nova.return_value = {"Creds": "Nothing"}
+        Config.get_nova_api_version.return_value = '2'
         nvclient.Client.return_value = "novaclient"
         hyp = Hypervisor(self.args)
         hyp.api_data = create_mock_array(hypervisor_data)
@@ -362,10 +364,11 @@ class test_all(unittest.TestCase):
         self.assertEqual(len(hyp.data), 5)
         self.assertEqual(hyp.data[0]['availability_zone'], 'test!test-1')
 
-    @patch('novaclient.v2.client')
+    @patch('novaclient.client')
     @patch('reporting_pollster.entities.entities.Config')
     def test_project_transform(self, Config, nvclient):
         Config.get_nova.return_value = {"Creds": "Nothing"}
+        Config.get_nova_api_version.return_value = '2'
         nvclient.Client.return_value = "novaclient"
         proj = Project(self.args)
         proj.db_data = proj_db_data
@@ -383,7 +386,7 @@ class test_all(unittest.TestCase):
         self.assertEqual(proj.data[-1]['organisation'],
                          "somewhere.entirely.else")
 
-    @patch('novaclient.v2.client')
+    @patch('novaclient.client')
     @patch('reporting_pollster.entities.entities.Config')
     def test_instance_transform(self, Config, nvclient):
         Config.get_nova.return_value = {"Creds": "Nothing"}
@@ -403,7 +406,7 @@ class test_all(unittest.TestCase):
         self.assertEqual(inst.hist_agg_data[1]['local_storage'], 310)
         self.assertEqual(inst.hist_agg_data[2]['local_storage'], 140)
 
-    @patch('novaclient.v2.client')
+    @patch('novaclient.client')
     @patch('reporting_pollster.entities.entities.Config')
     def test_format_query(self, Config, nvclient):
         Config.get_nova.return_value = {"Creds": "Nothing"}
