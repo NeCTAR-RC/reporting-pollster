@@ -28,6 +28,7 @@ local = {
     'port': 3306,
 }
 
+# defaults for both testing and production
 dbs = {
     'keystone': 'keystone',
     'nova': 'nova',
@@ -100,6 +101,9 @@ class Config(object):
         else:
             for (name, value) in parser.items('databases'):
                 cls.dbs[name] = value
+            if dbs.keys() != cls.dbs.keys():
+                logging.critical("Database mapping doesn't match")
+                sys.exit(1)
         verify_nova_creds(cls.nova_api_version, cls.nova)
 
     @classmethod
