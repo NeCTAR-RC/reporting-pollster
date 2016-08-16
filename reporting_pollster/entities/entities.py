@@ -820,7 +820,7 @@ class Instance(Entity):
             "instance_type_id as flavour, user_id as created_by, "
             "created_at as created, deleted_at as deleted, "
             "if(deleted<>0,false,true) as active, host as hypervisor, "
-            "availability_zone "
+            "availability_zone, cell_name "
             "from {nova}.instances order by created_at"
         ),
         'query_last_update': (
@@ -829,7 +829,7 @@ class Instance(Entity):
             "instance_type_id as flavour, user_id as created_by, "
             "created_at as created, deleted_at as deleted, "
             "if(deleted<>0,false,true) as active, host as hypervisor, "
-            "availability_zone "
+            "availability_zone, cell_name "
             "from {nova}.instances "
             "where ifnull(deleted_at, now()) > %s or updated_at > %s "
             "order by created_at"
@@ -838,11 +838,11 @@ class Instance(Entity):
             "replace into instance "
             "(project_id, id, name, vcpus, memory, root, ephemeral, flavour, "
             "created_by, created, deleted, active, hypervisor, "
-            "availability_zone) "
+            "availability_zone, cell_name) "
             "values (%(project_id)s, %(id)s, %(name)s, %(vcpus)s, %(memory)s, "
             "%(root)s, %(ephemeral)s, %(flavour)s, %(created_by)s, "
             "%(created)s, %(deleted)s, %(active)s, %(hypervisor)s, "
-            "%(availability_zone)s)"
+            "%(availability_zone)s, %(cell_name)s)"
         ),
         'hist_agg': (
             "replace into historical_usage "

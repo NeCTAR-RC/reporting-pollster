@@ -123,6 +123,7 @@ create table if not exists instance (
         active boolean default false comment "True if the instance is currently active",
         hypervisor varchar(255) comment "Hypervisor the instance is running on",
         availability_zone varchar(255) comment "Availability zone the instance is running in",
+        cell_name varchar(255) comment "Cell that the instance is running in",
         primary key (id),
         key instance_project_id_key (project_id),
         key instance_hypervisor_key (hypervisor),

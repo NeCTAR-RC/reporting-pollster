@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+import copy
 import unittest
 from mock import MagicMock, patch
 from reporting_pollster.entities.entities import Entity
@@ -188,7 +188,8 @@ instance_data = [
         'deleted': False,
         'active': True,
         'hypervisor': 'test03',
-        'availability_zone': 'test01'
+        'availability_zone': 'test01',
+        'cell_name': 'test01!cell!1'
     },
     {
         'project_id': 'uuid3',
@@ -204,7 +205,8 @@ instance_data = [
         'deleted': False,
         'active': True,
         'hypervisor': 'test04',
-        'availability_zone': 'test01'
+        'availability_zone': 'test01',
+        'cell_name': 'test01!cell!2'
     },
     {
         'project_id': 'uuid1',
@@ -220,7 +222,8 @@ instance_data = [
         'deleted': datetime.datetime(2015, 11, 24, 19, 40),
         'active': False,
         'hypervisor': 'test05',
-        'availability_zone': 'test01'
+        'availability_zone': 'test01',
+        'cell_name': 'test01!cell!3'
     },
 ]
 
@@ -392,7 +395,7 @@ class test_all(unittest.TestCase):
         Config.get_nova.return_value = {"Creds": "Nothing"}
         nvclient.Client.return_value = "novaclient"
         inst = Instance(self.args)
-        inst.db_data = instance_data
+        inst.db_data = copy.deepcopy(instance_data)
         inst.transform()
         self.assertEqual(len(inst.has_instance_data), 2)
         self.assertEqual(inst.has_instance_data[0]['project_id'], 'uuid1')
@@ -405,6 +408,8 @@ class test_all(unittest.TestCase):
         self.assertEqual(inst.hist_agg_data[0]['local_storage'], 70)
         self.assertEqual(inst.hist_agg_data[1]['local_storage'], 310)
         self.assertEqual(inst.hist_agg_data[2]['local_storage'], 140)
+        # the copy of the original data should not have changed
+        self.assertEqual(inst.data, instance_data)
 
     @patch('novaclient.client')
     @patch('reporting_pollster.entities.entities.Config')
