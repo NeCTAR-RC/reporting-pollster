@@ -1080,3 +1080,74 @@ class Image(Entity):
         start = datetime.now()
         self._load_simple()
         self.load_time = datetime.now() - start
+
+
+class Allocation(Entity):
+    """
+    Allocation data, using the allocation table locally and the
+    dashboard.rcallocation_allocationrequest table remotely.
+    """
+    queries = {
+        'query': (
+            "SELECT tenant_uuid AS project_id, contact_email, modified_time, "
+            "       field_of_research_1, for_percentage_1, "
+            "       field_of_research_2, for_percentage_2, "
+            "       field_of_research_3, for_percentage_3 "
+            "FROM {dashboard}.rcallocation_allocationrequest t1 "
+            "WHERE "
+            "  tenant_uuid > '' "
+            "  AND modified_time = ( "
+            "      SELECT MAX(modified_time) "
+            "      FROM {dashboard}.rcallocation_allocationrequest t2 "
+            "      WHERE t2.tenant_uuid = t1.tenant_uuid) "
+            "ORDER BY modified_time; "
+        ),
+        'query_last_update': (
+            "SELECT tenant_uuid AS project_id, contact_email, modified_time, "
+            "       field_of_research_1, for_percentage_1, "
+            "       field_of_research_2, for_percentage_2, "
+            "       field_of_research_3, for_percentage_3 "
+            "FROM {dashboard}.rcallocation_allocationrequest t1 "
+            "WHERE "
+            "  tenant_uuid > '' "
+            "  AND modified_time = ( "
+            "      SELECT MAX(modified_time) "
+            "      FROM {dashboard}.rcallocation_allocationrequest t2 "
+            "      WHERE t2.tenant_uuid = t1.tenant_uuid "
+            "      AND modified_time  >= %s) "
+            "/* %s <- required by _extract_all_last_update! */"
+            "ORDER BY modified_time; "
+        ),
+        'update': (
+            "REPLACE INTO allocation "
+            "(project_id, contact_email, modified_time, "
+            "       field_of_research_1, for_percentage_1, "
+            "       field_of_research_2, for_percentage_2, "
+            "       field_of_research_3, for_percentage_3 ) "
+            "VALUES (%(project_id)s, %(contact_email)s, %(modified_time)s, "
+            "       %(field_of_research_1)s, %(for_percentage_1)s, "
+            "       %(field_of_research_2)s, %(for_percentage_2)s, "
+            "       %(field_of_research_3)s, %(for_percentage_3)s )"
+        ),
+    }
+
+    table = "allocation"
+
+    def __init__(self, args):
+        super(Allocation, self).__init__(args)
+        self.db_data = []
+
+    def extract(self):
+        start = datetime.now()
+        self._extract_with_last_update()
+        self.extract_time = datetime.now() - start
+
+    def transform(self):
+        start = datetime.now()
+        self.data = self.db_data
+        self.transform_time = datetime.now() - start
+
+    def load(self):
+        start = datetime.now()
+        self._load_simple()
+        self.load_time = datetime.now() - start

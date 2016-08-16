@@ -214,3 +214,17 @@ create table if not exists historical_usage (
         local_storage int comment "Allocated local storage (root+ephemeral) in GB",
         primary key (day)
 ) comment "Daily snapshots of resource usage";
+
+-- A record of the allocations that were awarded
+create table if not exists allocation (
+  project_id    varchar(36) comment 'The project that was spawned by this allocation',
+  contact_email varchar(75) comment 'The contact person for this allocation',
+  modified_time datetime comment 'The last time the allocation was modified',
+  field_of_research_1 varchar(6) comment '1st field of research (FOR) code',
+  for_percentage_1 int(11) comment 'Percentage allocated for 1st FOR code',
+  field_of_research_2 varchar(6) comment '2nd field of research (FOR) code',
+  for_percentage_2 int(11) comment 'Percentage allocated for 2nd FOR code',
+  field_of_research_3 varchar(6) comment '3rd field of research (FOR) code',
+  for_percentage_3 int(11) comment 'Percentage allocated for 3rd FOR code',
+  primary key (project_id)
+) comment 'A record of the allocations that were awarded';

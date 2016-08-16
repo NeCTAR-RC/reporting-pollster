@@ -25,6 +25,7 @@ tables = [
     'instance',
     'volume',
     'image'
+    'allocation'
 ]
 
 #

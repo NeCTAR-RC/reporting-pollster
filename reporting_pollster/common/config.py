@@ -35,6 +35,7 @@ dbs = {
     'cinder': 'cinder',
     'glance': 'glance',
     'rcshibboleth': 'rcshibboleth',
+    'dashboard': 'dashboard',
 }
 
 
