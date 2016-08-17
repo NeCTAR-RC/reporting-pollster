@@ -132,8 +132,6 @@ def polling_loop(args):
             for table in tables:
                 entity = Entity.from_table_name(table, args)
                 entity.process()
-            if 'poll' not in args or not args.poll:
-                break
         # in this context a nova ClientException is almost certainly a
         # transient error, so handle this explicitly
         except ClientException as e:
@@ -160,6 +158,8 @@ def polling_loop(args):
         logging.info("Finished polling loop at %s",
                      time.strftime("%Y-%m-%d %X %Z",
                                    time.localtime()))
+        if 'poll' not in args or not args.poll:
+            break
         remaining = (start + args.poll_period) - end
         if remaining > 0:
             time.sleep(remaining)
