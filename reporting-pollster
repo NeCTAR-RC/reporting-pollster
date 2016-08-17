@@ -24,7 +24,7 @@ tables = [
     'flavour',
     'instance',
     'volume',
-    'image'
+    'image',
     'allocation'
 ]
 
