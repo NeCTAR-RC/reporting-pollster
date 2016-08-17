@@ -95,15 +95,6 @@ if [ $error -gt 0 ]; then
         exit 1
 fi
 
-# The process is pretty simple: if we're recreating the database we start by
-# dropping the database and recreating it (this will fail if we lack the
-# the necessary privileges). Then we simply run the specified schema file.
-
-if [ -n "$recreate" ]; then
-        echo "Not currently supported - please manually recreate the database and schema"
-        exit 0
-fi
-
 # assemble the command line
 command=`which mysql`
 command="$command --user=$db_user --password=$db_pass"
@@ -114,6 +105,30 @@ if [ -n $db_port ]; then
         command="$command --port=$db_port"
 fi
 command="$command $db_name"
+
+# The process is pretty simple: if we're recreating the database we start by
+# deleting the existing tables (this will fail if we lack the
+# the necessary privileges).
+#
+# Then we simply load the specified schema file.
+
+if [ -n "$recreate" ]; then
+    echo "Are you sure you want to drop the existing data?"
+    echo "Press 'Y' to proceed, any other key to exit."
+    read -n 1 -r
+    echo # move to a new line
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Exit chosen!"
+        exit 1
+    fi
+    awk=$(which awk)
+    grep=$(which grep)
+    tables=$($command -e 'show tables' | $awk '{ print $1}' | $grep -v '^Tables')
+    for t in $tables; do
+        logger -s -t reporting-db-sync -i  "Deleting $t table from $db_name database"
+        $command -e "drop table $t"
+    done
+fi
 
 # check to see if the schema needs decompressing
 tmp_schema=`mktemp --tmpdir reporting-schema.XXXXXX`
@@ -130,6 +145,7 @@ case $schema in
 esac
 
 # now run the command
+logger -s -t reporting-db-sync -i "Loading $db_name database with $schema"
 $command < $tmp_schema
 
 # cleanup
