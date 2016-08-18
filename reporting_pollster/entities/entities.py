@@ -98,19 +98,17 @@ class Entity(object):
         logging.debug("Query: %s", self._format_query('query'))
 
     def _extract_all_last_update(self):
-        logging.info("Extracting data for %s table (last_update)",
-                     self.table)
+        logging.info("Extracting data for %s table (last_update)", self.table)
+        query = self._format_query('query_last_update')
         cursor = DB.remote_cursor()
-        cursor.execute(self._format_query('query_last_update'),
-                       (self.last_update, self.last_update))
+        cursor.execute(query, {'last_update': self.last_update})
         self.db_data = cursor.fetchall()
         logging.debug("Rows returned: %d", cursor.rowcount)
 
     def _extract_dry_run_last_update(self):
         logging.info("Extracting data for %s table (last update)", self.table)
         query = self._format_query('query_last_update')
-        logging.debug("Query: %s",
-                      query % (self.last_update, self.last_update))
+        logging.debug("Query: %s", query % {'last_update': self.last_update})
 
     def _extract_no_last_update(self):
         """
@@ -410,7 +408,8 @@ class Hypervisor(Entity):
         'query_last_update': (
             "select id, 'nova' as availability_zone, hypervisor_hostname, "
             "host_ip, vcpus, memory_mb, local_gb from {nova}.compute_nodes "
-            "where ifnull(deleted_at, now()) > %s or updated_at > %s"
+            "where ifnull(deleted_at, now()) > %(last_update)s "
+            "   or updated_at > %(last_update)s"
         ),
         'update': (
             "replace into hypervisor "
@@ -776,7 +775,8 @@ class Flavour(Entity):
             "root_gb as root, ephemeral_gb as ephemeral, is_public as public, "
             "not deleted as active "
             "from {nova}.instance_types "
-            "where ifnull(deleted_at, now()) > %s or updated_at > %s"
+            "where ifnull(deleted_at, now()) > %(last_update)s "
+            "   or updated_at > %(last_update)s"
         ),
         'update': (
             "replace into flavour "
@@ -831,7 +831,8 @@ class Instance(Entity):
             "if(deleted<>0,false,true) as active, host as hypervisor, "
             "availability_zone, cell_name "
             "from {nova}.instances "
-            "where ifnull(deleted_at, now()) > %s or updated_at > %s "
+            "where ifnull(deleted_at, now()) > %(last_update)s "
+            "   or updated_at > %(last_update)s "
             "order by created_at"
         ),
         'update': (
@@ -999,7 +1000,8 @@ class Volume(Entity):
             "from {cinder}.volumes as v left join "
             "{cinder}.volume_attachment as a "
             "on v.id = a.volume_id and a.deleted = 0 "
-            "where ifnull(v.deleted_at, now()) > %s or v.updated_at > %s"
+            "where ifnull(v.deleted_at, now()) > %(last_update)s "
+            "   or v.updated_at > %(last_update)s"
         ),
         'update': (
             "replace into volume "
@@ -1050,7 +1052,8 @@ class Image(Entity):
             "is_public as public, created_at as created, "
             "deleted_at as deleted, not deleted as active "
             "from {glance}.images "
-            "where ifnull(deleted_at, now()) > %s or updated_at > %s"
+            "where ifnull(deleted_at, now()) > %(last_update)s "
+            "   or updated_at > %(last_update)s"
         ),
         'update': (
             "replace into image "
@@ -1114,8 +1117,7 @@ class Allocation(Entity):
             "      SELECT MAX(modified_time) "
             "      FROM {dashboard}.rcallocation_allocationrequest t2 "
             "      WHERE t2.tenant_uuid = t1.tenant_uuid "
-            "      AND modified_time  >= %s) "
-            "/* %s <- required by _extract_all_last_update! */"
+            "      AND modified_time  >= %(last_update)s) "
             "ORDER BY modified_time; "
         ),
         'update': (
