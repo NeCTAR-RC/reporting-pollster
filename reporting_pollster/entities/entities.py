@@ -107,7 +107,7 @@ class Entity(object):
         logging.debug("Rows returned: %d", cursor.rowcount)
 
     def _extract_dry_run_last_update(self):
-        logging.info("Extracting data for table (last update)", self.table)
+        logging.info("Extracting data for %s table (last update)", self.table)
         query = self._format_query('query_last_update')
         logging.debug("Query: %s",
                       query % (self.last_update, self.last_update))
