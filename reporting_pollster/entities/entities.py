@@ -71,6 +71,18 @@ class Entity(object):
 
         return entity(args)
 
+    def dup_record(self, record):
+        """
+        Trivial utility method.
+        Probably doesn't seem important, but it avoids any confusion between
+        the return type of the database query (which may simply emulate a dict
+        type) and a "real" dict
+        """
+        t = {}
+        for key in record.keys():
+            t[key] = record[key]
+        return t
+
     def _format_query(self, qname):
         """
         This is designed to handle the case where the database name is
@@ -1092,44 +1104,59 @@ class Allocation(Entity):
     """
     queries = {
         'query': (
-            "SELECT tenant_uuid AS project_id, contact_email, modified_time, "
-            "       field_of_research_1, for_percentage_1, "
-            "       field_of_research_2, for_percentage_2, "
-            "       field_of_research_3, for_percentage_3 "
-            "FROM {dashboard}.rcallocation_allocationrequest t1 "
+            "SELECT id, tenant_uuid AS project_id, "
+            "  tenant_name as project_name, contact_email, approver_email, "
+            "  status, modified_time, "
+            "  field_of_research_1, for_percentage_1, "
+            "  field_of_research_2, for_percentage_2, "
+            "  field_of_research_3, for_percentage_3, "
+            "  funding_national_percent as funding_national, "
+            "  funding_node "
+            "FROM {dashboard}.rcallocation_allocationrequest "
             "WHERE "
-            "  tenant_uuid > '' "
-            "  AND modified_time = ( "
-            "      SELECT MAX(modified_time) "
-            "      FROM {dashboard}.rcallocation_allocationrequest t2 "
-            "      WHERE t2.tenant_uuid = t1.tenant_uuid) "
+            "  parent_request_id is null and status in ('A', 'X') "
             "ORDER BY modified_time; "
         ),
         'query_last_update': (
-            "SELECT tenant_uuid AS project_id, contact_email, modified_time, "
-            "       field_of_research_1, for_percentage_1, "
-            "       field_of_research_2, for_percentage_2, "
-            "       field_of_research_3, for_percentage_3 "
-            "FROM {dashboard}.rcallocation_allocationrequest t1 "
+            "SELECT id, tenant_uuid AS project_id, "
+            "  tenant_name as project_name, contact_email, approver_email, "
+            "  status, modified_time, "
+            "  field_of_research_1, for_percentage_1, "
+            "  field_of_research_2, for_percentage_2, "
+            "  field_of_research_3, for_percentage_3 "
+            "  funding_national_percent as funding_national, "
+            "  funding_node "
+            "FROM {dashboard}.rcallocation_allocationrequest "
             "WHERE "
-            "  tenant_uuid > '' "
-            "  AND modified_time = ( "
-            "      SELECT MAX(modified_time) "
-            "      FROM {dashboard}.rcallocation_allocationrequest t2 "
-            "      WHERE t2.tenant_uuid = t1.tenant_uuid "
-            "      AND modified_time  >= %(last_update)s) "
+            "  parent_request_id is null and status in ('A', 'X') "
+            "  AND modified_time  >= %(last_update)s) "
             "ORDER BY modified_time; "
         ),
         'update': (
             "REPLACE INTO allocation "
-            "(project_id, contact_email, modified_time, "
-            "       field_of_research_1, for_percentage_1, "
-            "       field_of_research_2, for_percentage_2, "
-            "       field_of_research_3, for_percentage_3 ) "
-            "VALUES (%(project_id)s, %(contact_email)s, %(modified_time)s, "
-            "       %(field_of_research_1)s, %(for_percentage_1)s, "
-            "       %(field_of_research_2)s, %(for_percentage_2)s, "
-            "       %(field_of_research_3)s, %(for_percentage_3)s )"
+            "(id, project_id, project_name, contact_email, approver_email, "
+            "  status, modified_time, "
+            "  field_of_research_1, for_percentage_1, "
+            "  field_of_research_2, for_percentage_2, "
+            "  field_of_research_3, for_percentage_3, "
+            "  funding_national, funding_node ) "
+            "VALUES (%(project_id)s, %(project_name)s, %(contact_email)s, "
+            "  %(approver_email)s, %(status)s, %(modified_time)s, "
+            "  %(field_of_research_1)s, %(for_percentage_1)s, "
+            "  %(field_of_research_2)s, %(for_percentage_2)s, "
+            "  %(field_of_research_3)s, %(for_percentage_3)s, "
+            "  %(funding_national)s, %(funding_node)s)"
+        ),
+        'tenant_allocation_id': (
+            "select project_id, "
+            "replace(replace(substring(extra, "
+            "                          locate('allocation_id', extra)+16, 5), "
+            "                '\"', "
+            "                ''), "
+            "        '}', "
+            "        '') as allocation_id "
+            "from {keystone}.project where name not like 'pt-%' "
+            "and extra like '%allocation_id%'"
         ),
     }
 
@@ -1138,15 +1165,63 @@ class Allocation(Entity):
     def __init__(self, args):
         super(Allocation, self).__init__(args)
         self.db_data = []
+        self.tenant_allocation_data = []
 
     def extract(self):
         start = datetime.now()
         self._extract_with_last_update()
+        cursor = DB.remote_cursor()
+        cursor.execute(self._format_query('tenant_allocation_id'))
+        self.tenant_allocation_data = cursor.fetchall()
         self.extract_time = datetime.now() - start
 
     def transform(self):
         start = datetime.now()
-        self.data = self.db_data
+        # create a dict keyed on the project_id
+        project_alloc = {}
+        for t in self.tenant_allocation_data:
+            project_alloc[t['project_id']] = t['allocation_id']
+        # and on allocation_id
+        allocs_by_id = {}
+        for t in self.db_data:
+            allocs_by_id[t['id']] = t
+        # go through the raw data and look for duplicates
+        alloc_dict = {}
+        alloc_null_tenant = []
+        for alloc in self.db_data:
+            project_id = alloc['project_id']
+            # deal with null tenant_uuids
+            if not project_id or project_id == "":
+                alloc['project_id'] = None
+                alloc_null_tenant.append(self.dup_record(alloc))
+            elif project_id not in alloc_dict:
+                alloc_dict[project_id] = self.dup_record(alloc)
+            else:
+                # duplicated project_id - de-dup using the keystone
+                # data
+                try:
+                    alloc_id = project_alloc[project_id]
+                    alloc = self.dup_record(allocs_by_id[alloc_id])
+                    alloc_dict[project_id] = alloc
+                except KeyError:
+                    # the project has duplicate alloctaion records
+                    # but no allocation_id in keystone - this should
+                    # be logged as a bogus allocation
+                    # Note: this should not happen, as manual verification
+                    # of the allocations data has shown that all
+                    # duplicated project_ids have an allocation_id in
+                    # keystone
+                    logging.info("Bogus allocation id %s for project %s",
+                                 alloc['id'], project_id)
+
+        # now pull it into the final data table
+        self.data = []
+        keys = alloc_dict.keys()
+        keys.sort()
+        for k in keys:
+            self.data.append(alloc_dict[k])
+        for a in alloc_null_tenant:
+            self.data.append(a)
         self.transform_time = datetime.now() - start
 
     def load(self):

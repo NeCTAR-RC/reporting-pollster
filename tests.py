@@ -7,6 +7,7 @@ from reporting_pollster.entities.entities import Aggregate
 from reporting_pollster.entities.entities import Hypervisor
 from reporting_pollster.entities.entities import Project
 from reporting_pollster.entities.entities import Instance
+from reporting_pollster.entities.entities import Allocation
 import pickle
 import datetime
 
@@ -310,6 +311,127 @@ format_query_correct = (
     "where four = %s and three >= %s"
     )
 
+alloc_data = [
+    {
+        'id': 1,
+        'project_id': 'uuid1',
+        'project_name': 'tenant 1',
+        'contact_email': 'user@foo.bar',
+        'approver_email': 'admin.user@foo.bar',
+        'status': 'A',
+        'modified_time': 'now',
+        'field_of_research_1': '1234',
+        'for_percentage_1': 40,
+        'field_of_research_2': '2345',
+        'for_percentage_2': 30,
+        'field_of_research_3': '3456',
+        'for_percentage_3': 30,
+        'funding_national': 100,
+        'funding_node': None,
+    },
+    {
+        'id': 2,
+        'project_id': 'uuid2',
+        'project_name': 'tenant 2',
+        'contact_email': 'user2@foo.bar',
+        'approver_email': 'admin.user@foo.bar',
+        'status': 'A',
+        'modified_time': 'now',
+        'field_of_research_1': '1234',
+        'for_percentage_1': 40,
+        'field_of_research_2': '2345',
+        'for_percentage_2': 30,
+        'field_of_research_3': '3456',
+        'for_percentage_3': 30,
+        'funding_national': 100,
+        'funding_node': None,
+    },
+    {
+        'id': 3,
+        'project_id': 'uuid3',
+        'project_name': 'tenant 3',
+        'contact_email': 'user@foo.baz',
+        'approver_email': 'admin.user@foo.baz',
+        'status': 'A',
+        'modified_time': 'now',
+        'field_of_research_1': '1234',
+        'for_percentage_1': 40,
+        'field_of_research_2': '2345',
+        'for_percentage_2': 30,
+        'field_of_research_3': '3456',
+        'for_percentage_3': 30,
+        'funding_national': 100,
+        'funding_node': None,
+    },
+    {
+        'id': 4,
+        'project_id': 'uuid3',
+        'project_name': 'tenant 3',
+        'contact_email': 'user@foo.baz',
+        'approver_email': 'admin.user@foo.baz',
+        'status': 'A',
+        'modified_time': 'now',
+        'field_of_research_1': '1234',
+        'for_percentage_1': 40,
+        'field_of_research_2': '2345',
+        'for_percentage_2': 30,
+        'field_of_research_3': '3456',
+        'for_percentage_3': 30,
+        'funding_national': 100,
+        'funding_node': None,
+    },
+    {
+        'id': 5,
+        'project_id': None,
+        'project_name': 'tenant 4',
+        'contact_email': 'user@foo.baz',
+        'approver_email': 'admin.user@foo.baz',
+        'status': 'A',
+        'modified_time': 'now',
+        'field_of_research_1': '1234',
+        'for_percentage_1': 40,
+        'field_of_research_2': '2345',
+        'for_percentage_2': 30,
+        'field_of_research_3': '3456',
+        'for_percentage_3': 30,
+        'funding_national': 100,
+        'funding_node': None,
+    },
+    {
+        'id': 6,
+        'project_id': '',
+        'project_name': 'tenant 5',
+        'contact_email': 'user@foo.baz',
+        'approver_email': 'admin.user@foo.baz',
+        'status': 'A',
+        'modified_time': 'now',
+        'field_of_research_1': '1234',
+        'for_percentage_1': 40,
+        'field_of_research_2': '2345',
+        'for_percentage_2': 30,
+        'field_of_research_3': '3456',
+        'for_percentage_3': 30,
+        'funding_national': 100,
+        'funding_node': None,
+    },
+
+]
+
+project_allocations = [
+    {
+        'project_id': 'uuid1',
+        'allocation_id': 1,
+    },
+    {
+        'project_id': 'uuid2',
+        'allocation_id': 2,
+    },
+    {
+        'project_id': 'uuid3',
+        'allocation_id': 4,
+    },
+]
+
 
 def create_mock_array(data):
     accum = []
@@ -420,6 +542,20 @@ class test_all(unittest.TestCase):
         entity = Entity(self.args)
         entity.queries = {"testing": format_query_orig}
         self.assertEqual(entity._format_query('testing'), format_query_correct)
+
+    @patch('reporting_pollster.entities.entities.Config')
+    def test_allocation_transform(self, Config):
+        Config.get_dbs.return_value = {"Creds": "Nothing"}
+        allocs = Allocation(self.args)
+        allocs.db_data = copy.deepcopy(alloc_data)
+        allocs.tenant_allocation_data = copy.deepcopy(project_allocations)
+        allocs.transform()
+        self.assertEqual(len(allocs.data), 5)
+        self.assertEqual(allocs.data[0]['project_id'], 'uuid1')
+        self.assertEqual(allocs.data[2]['project_id'], 'uuid3')
+        self.assertEqual(allocs.data[2]['id'], 4)
+        self.assertIsNone(allocs.data[3]['project_id'])
+        self.assertIsNone(allocs.data[4]['project_id'])
 
 
 if __name__ == '__main__':
