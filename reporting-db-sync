@@ -5,6 +5,7 @@
 #
 
 #set -x
+set -e
 
 db_name=""
 db_user=""
@@ -19,7 +20,7 @@ usage() {
 $0 --db-name=<db> --db-user=<user> --db-pass=<password> [--db-host=<host>] [--db-port=<port>] [--schema=<schema file>] [--recreate] [--help]
 
 Manage the reporting backend database schema.
-        --db-name       Database name to connect to
+        --db-name       Database name to connect to (must already exist)
         --db-user       User to connect to the database as
         --db-pass       Password to use for connection
         --db-host       Database host
@@ -32,7 +33,7 @@ EOF
 }
 
 get_argument() {
-        echo $1 |cut -d '=' -f 2
+        echo "$1" |cut -d '=' -f 2
 }
 
 if [ $# -eq 0 ]; then
@@ -43,22 +44,22 @@ fi
 while [ $# -gt 0 ]; do
         case $1 in
                 --db-name=*)
-                        db_name=$(get_argument $1)
+                        db_name=$(get_argument "$1")
                         ;;
                 --db-user=*)
-                        db_user=$(get_argument $1)
+                        db_user=$(get_argument "$1")
                         ;;
                 --db-pass=*)
-                        db_pass=$(get_argument $1)
+                        db_pass=$(get_argument "$1")
                         ;;
                 --db-host=*)
-                        db_host=$(get_argument $1)
+                        db_host=$(get_argument "$1")
                         ;;
                 --db-port=*)
-                        db_port=$(get_argument $1)
+                        db_port=$(get_argument "$1")
                         ;;
                 --schema=*)
-                        schema=$(get_argument $1)
+                        schema=$(get_argument "$1")
                         ;;
                 --recreate)
                         recreate="yes"
@@ -89,19 +90,19 @@ if [ -z "$db_pass" ]; then
         echo "Must specify password for connection"
         error=1
 fi
-if [ $error -gt 0 ]; then
+if [ ${error} -gt 0 ]; then
         echo ""
         usage
         exit 1
 fi
 
 # assemble the command line
-command=`which mysql`
+command=$(which mysql)
 command="$command --user=$db_user --password=$db_pass"
-if [ -n $db_host ]; then
+if [ -n "$db_host" ]; then
         command="$command --host=$db_host"
 fi
-if [ -n $db_port ]; then
+if [ -n "$db_port" ]; then
         command="$command --port=$db_port"
 fi
 command="$command $db_name"
@@ -123,30 +124,30 @@ if [ -n "$recreate" ]; then
     fi
     awk=$(which awk)
     grep=$(which grep)
-    tables=$($command -e 'show tables' | $awk '{ print $1}' | $grep -v '^Tables')
+    tables=$(${command} -e 'show tables' | $awk "{ print $1}" | $grep -v '^Tables')
     for t in $tables; do
         logger -s -t reporting-db-sync -i  "Deleting $t table from $db_name database"
-        $command -e "drop table $t"
+        ${command} -e "drop table $t"
     done
 fi
 
 # check to see if the schema needs decompressing
-tmp_schema=`mktemp --tmpdir reporting-schema.XXXXXX`
-case $schema in
+tmp_schema=$(mktemp --tmpdir reporting-schema.XXXXXX)
+case ${schema} in
         *.gz)
-                gunzip -c $schema >$tmp_schema
+                gunzip -c "$schema" > "$tmp_schema"
                 ;;
         *.bz2)
-                bunzip2 -c $schema >$tmp_schema
+                bunzip2 -c "$schema" > "$tmp_schema"
                 ;;
         *)
-                cat $schema >$tmp_schema
+                cat "$schema" > "$tmp_schema"
                 ;;
 esac
 
 # now run the command
 logger -s -t reporting-db-sync -i "Loading $db_name database with $schema"
-$command < $tmp_schema
+${command} < "$tmp_schema"
 
 # cleanup
-rm -f $tmp_schema
+rm -f "$tmp_schema"
