@@ -1123,7 +1123,7 @@ class Allocation(Entity):
             "  status, modified_time, "
             "  field_of_research_1, for_percentage_1, "
             "  field_of_research_2, for_percentage_2, "
-            "  field_of_research_3, for_percentage_3 "
+            "  field_of_research_3, for_percentage_3, "
             "  funding_national_percent as funding_national, "
             "  funding_node "
             "FROM {dashboard}.rcallocation_allocationrequest "
