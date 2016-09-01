@@ -1129,7 +1129,7 @@ class Allocation(Entity):
             "FROM {dashboard}.rcallocation_allocationrequest "
             "WHERE "
             "  parent_request_id is null and status in ('A', 'X') "
-            "  AND modified_time  >= %(last_update)s) "
+            "  AND modified_time  >= %(last_update)s "
             "ORDER BY modified_time; "
         ),
         'update': (
