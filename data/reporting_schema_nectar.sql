@@ -84,8 +84,8 @@ create table if not exists user (
 create table if not exists `role` (
         role varchar(255) comment 'Role name',
         user varchar(64) comment 'User ID this role is assigned to',
-        project varchar(36) comment 'Project ID the user is assigned this role in'
-        primary key (role, user, project),
+        project varchar(36) comment 'Project ID the user is assigned this role in',
+        primary key (role, user, project)
 --      foreign key role_user_fkey (user) references user(id),
 --      foreign key role_project_fkey (project) references project(id)
 ) comment 'User membership of projects, with roles';
