@@ -10,7 +10,7 @@ from reporting_pollster.common.config import Config
 from reporting_pollster.common.DB import DB
 from reporting_pollster.entities.entities import Entity
 from novaclient.exceptions import ClientException
-from mysql.connector.errors import OperationalError
+from pymysql.err import OperationalError
 import time
 import logging
 import argparse

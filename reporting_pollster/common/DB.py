@@ -4,7 +4,8 @@
 #
 
 import logging
-import mysql.connector
+import pymysql
+from pymysql.cursors import DictCursor
 from reporting_pollster.common.config import Config
 
 
@@ -22,7 +23,8 @@ class DB(object):
     def remote(cls):
         if not cls.remote_conn:
             cls.remote_creds = Config.get_remote()
-            cls.remote_conn = mysql.connector.connect(**cls.remote_creds)
+            cls.remote_conn = pymysql.connect(cursorclass=DictCursor,
+                                              **cls.remote_creds)
             logging.debug("Remote server version: %s",
                           cls.remote_conn.get_server_info())
         return cls.remote_conn
@@ -31,13 +33,14 @@ class DB(object):
     def remote_cursor(cls, dictionary=True):
         if not cls.remote_conn:
             cls.remote()
-        return cls.remote().cursor(dictionary=dictionary)
+        return cls.remote().cursor()
 
     @classmethod
     def local(cls):
         if not cls.local_conn:
             cls.local_creds = Config.get_local()
-            cls.local_conn = mysql.connector.connect(**cls.local_creds)
+            cls.local_conn = pymysql.connect(cursorclass=DictCursor,
+                                             **cls.local_creds)
             logging.debug("Local server version: %s",
                           cls.local_conn.get_server_info())
         return cls.local_conn
@@ -46,7 +49,7 @@ class DB(object):
     def local_cursor(cls, dictionary=True):
         if not cls.local_conn:
             cls.local()
-        return cls.local().cursor(dictionary=dictionary)
+        return cls.local().cursor()
 
     @classmethod
     def invalidate(cls):
