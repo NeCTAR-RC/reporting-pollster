@@ -2,12 +2,12 @@ Source: reporting-pollster
 Maintainer: NCI Cloud Team <cloud.team@nci.org.au>
 Section: python
 Priority: optional
-Build-Depends: python-setuptools (>= 0.6b3), python (>= 2.6.6-3), debhelper (>= 9), dh-python, python-mock, python-novaclient, python-mysql.connector, python-pip
+Build-Depends: python-setuptools (>= 0.6b3), python (>= 2.6.6-3), debhelper (>= 9), dh-python, python-mock, python-novaclient, python-pymysql, python-pip
 Standards-Version: 3.9.1
 
 Package: python-reporting-pollster
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python-mysql.connector (>= 2.0.4)
+Depends: ${misc:Depends}, ${python:Depends}
 Description: OpenStack reporting pollster system
  # reporting-pollster
  OpenStack Reporting Pollster
