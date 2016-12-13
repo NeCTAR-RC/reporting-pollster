@@ -14,7 +14,7 @@ config_file = "./reporting.conf"
 # defaults for testing
 remote = {
     'user': 'reporting-test',
-    'password': 'Testing out the system',
+    'passwd': 'Testing out the system',
     'database': 'reporting2',
     'host': '127.0.0.1',
     'port': 33306,
@@ -22,7 +22,7 @@ remote = {
 
 local = {
     'user': 'reporting-test',
-    'password': 'Testing out the system',
+    'passwd': 'Testing out the system',
     'database': 'reporting2',
     'host': '127.0.0.1',
     'port': 3306,
