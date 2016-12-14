@@ -5,6 +5,7 @@
 
 import os
 import sys
+import traceback
 import signal
 from reporting_pollster.common.config import Config
 from reporting_pollster.common.DB import DB
@@ -155,6 +156,11 @@ def polling_loop(args):
         # since we can continue despite the error (we hope)).
         except Exception as e:
             logging.error("Unknown exception received: %s", repr(e))
+            if 'debug' in args:
+                t, v, tb = sys.exc_info()
+                tb_strings = traceback.format_tb(tb)
+                logging.debug("".join(tb_strings))
+
         end = time.time()
         logging.info("Finished polling loop at %s",
                      time.strftime("%Y-%m-%d %X %Z",

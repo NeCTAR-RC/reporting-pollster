@@ -39,6 +39,22 @@ dbs = {
 }
 
 
+def sanitise_db_creds(creds):
+    """
+    Clean up certain values in the credentials to make sure that the DB driver
+    doesn't get confused.
+    """
+    tmp = {}
+    for name, value in creds.items():
+        if name == 'port':
+            tmp[name] = int(value)
+        if name == 'password':
+            tmp['passwd'] = value
+        else:
+            tmp[name] = value
+    return tmp
+
+
 def verify_nova_creds(nova_version, creds):
     client = nvclient.Client(nova_version, **creds)
     # will return success quickly or fail quickly
@@ -74,6 +90,10 @@ class Config(object):
         cls.remote = None
         cls.local = None
         cls.nova = None
+        cls.dbs = None
+        # check environment first, override later
+        cls.load_nova_environment()
+
         parser = SafeConfigParser()
         parser.read(filename)
         if not parser.has_section('remote'):
@@ -85,21 +105,29 @@ class Config(object):
         if not parser.has_section('nova') and cls.nova is None:
             logging.critical("No nova credentials provided - failing")
             sys.exit(1)
-        cls.remote = {}
-        cls.local = {}
-        cls.nova = {}
-        cls.dbs = {}
+
+        creds = {}
         for (name, value) in parser.items('remote'):
-            cls.remote[name] = value
+            creds[name] = value
+        cls.remote = sanitise_db_creds(creds)
+        creds = {}
         for (name, value) in parser.items('local'):
-            cls.local[name] = value
-        for (name, value) in parser.items('nova'):
-            cls.nova[name] = value
-        cls.extract_nova_version()
+            creds[name] = value
+        cls.local = sanitise_db_creds(creds)
+        if parser.has_section('nova'):
+            creds = {}
+            for (name, value) in parser.items('nova'):
+                creds[name] = value
+            try:
+                cls.nova = cls.extract_nova_version(creds)
+            except KeyError:
+                logging.critical("No valid nova credentials found - failing")
+                sys.exit(1)
         if not parser.has_section('databases'):
             logging.info("No database mapping defined - using default")
             cls.dbs = dbs
         else:
+            cls.dbs = {}
             for (name, value) in parser.items('databases'):
                 cls.dbs[name] = value
             if dbs.keys() != cls.dbs.keys():
@@ -119,24 +147,29 @@ class Config(object):
             cls.reload_config(cls.config_file)
         else:
             logging.debug("Loading in-build default configuration")
-            cls.remote = remote
-            cls.local = local
+            cls.remote = sanitise_db_creds(remote)
+            cls.local = sanitise_db_creds(local)
             cls.dbs = dbs
-            try:
-                cls.nova = credentials.get_nova_credentials()
-                cls.extract_nova_version()
-            except KeyError:
-                logging.critical(
-                    "Loading nova credentials from environment failed"
-                )
-                sys.exit(1)
+            cls.load_nova_environment()
         verify_nova_creds(cls.nova_api_version, cls.nova)
 
     @classmethod
-    def extract_nova_version(cls):
-        if cls.nova['version']:
-            cls.nova_api_version = cls.nova['version']
-            del cls.nova['version']
+    def extract_nova_version(cls, creds):
+        try:
+            cls.nova_api_version = creds['version']
+            del creds['version']
+            return creds
+        except KeyError:
+            logging.debug("Trying to load invalid nova credentials")
+            raise
+
+    @classmethod
+    def load_nova_environment(cls):
+        try:
+            creds = credentials.get_nova_credentials()
+            cls.nova = cls.extract_nova_version(creds)
+        except KeyError:
+            logging.info("Loading nova credentials from environment failed")
 
     @classmethod
     def get_remote(cls):

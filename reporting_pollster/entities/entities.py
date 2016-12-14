@@ -262,12 +262,12 @@ class Entity(object):
         Get the time that the data was updated most recently, so that we can
         process only the updated data.
         """
-        cursor = DB.local_cursor(dictionary=False)
+        cursor = DB.local_cursor()
         cursor.execute(cls.metadata_query, (table, ))
         row = cursor.fetchone()
         res = None
         if row:
-            res = row[0]
+            res = row['last_update']
         return res
 
     def get_last_update(self, table=None):
