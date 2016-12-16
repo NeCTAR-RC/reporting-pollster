@@ -53,7 +53,7 @@ def sanitise_db_creds(creds):
     for name, value in creds.items():
         if name == 'port':
             tmp[name] = int(value)
-        if name == 'password':
+        elif name == 'password':
             tmp['passwd'] = value
         else:
             tmp[name] = value
