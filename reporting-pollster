@@ -8,26 +8,16 @@ import sys
 import traceback
 import signal
 from reporting_pollster.common.config import Config
+from reporting_pollster.common.config import ConfigError
 from reporting_pollster.common.DB import DB
 from reporting_pollster.entities.entities import Entity
+from reporting_pollster.entities.entities import TableNotFound
 from novaclient.exceptions import ClientException
 from pymysql.err import OperationalError
 import time
 import logging
 import argparse
 
-tables = [
-    'aggregate',
-    'hypervisor',
-    'project',
-    'user',
-    'role',
-    'flavour',
-    'instance',
-    'volume',
-    'image',
-    'allocation'
-]
 
 #
 # So how do we do this . . .
@@ -85,11 +75,20 @@ def parse_args():
                         help="Number of seconds between each polling run")
     parser.add_argument('--pidfile', action='store', required=False,
                         help="File to store PID info in")
+    parser.add_argument('--tables', action='store', nargs='+', required=False,
+                        help="List of tables to update")
+    parser.add_argument('--list-tables', action='store_true', required=False,
+                        default=False, help="List available tables")
     args = parser.parse_args()
     return args
 
 
 class Handler(object):
+    """
+    Simple signal handling code. This exists primarily to allow for sensible
+    handling of a pidfile - rather than leaving a stale pidfile floating
+    around, the handler supports cleaning it up most of the time.
+    """
 
     pidfile = None
 
@@ -125,15 +124,38 @@ class Handler(object):
 
 
 def polling_loop(args):
+    """
+    The core of the pollster - iterate over the list of tables that need
+    updating, and call the table handler's process() method.
+
+    When we leave this function the whole process will exit through some
+    cleanup code.
+    """
     while True:
         logging.info("Starting polling loop at %s",
                      time.strftime("%Y-%m-%d %X %Z",
                                    time.localtime()))
         start = time.time()
+        tables = Entity.get_table_names()
+        if 'tables' in args:
+            if 'poll' in args and args.poll:
+                logging.critical(
+                    "Cannot poll when not doing a complete table set"
+                )
+                return
+            tables = args.tables
         try:
             for table in tables:
                 entity = Entity.from_table_name(table, args)
                 entity.process()
+        # one of the tables requested wasn't found
+        #
+        # This is always a fatal error - if it's not a user error it's a bug
+        # in the core code, and the only sensible response is to bail
+        except TableNotFound as e:
+            logging.critical("Handler for table %s not found", e.table)
+            return
+
         # in this context a nova ClientException is almost certainly a
         # transient error, so handle this explicitly
         except ClientException as e:
@@ -180,6 +202,11 @@ def polling_loop(args):
 def main():
     args = parse_args()
 
+    if args.list_tables:
+        print("Known table names:")
+        print("\n".join(Entity.get_table_names()))
+        return
+
     loglevel = getattr(logging, args.loglevel.upper())
     log_config = {
         'format': "%(asctime)s %(levelname)s: %(message)s",
@@ -199,7 +226,12 @@ def main():
     logging.basicConfig(**log_config)
     if 'config_file' in args:
         logging.info("Loading config from %s", args.config_file)
-        Config.reload_config(args.config_file)
+        try:
+            Config.reload_config(args.config_file)
+        except ConfigError as e:
+            logging.critical("Configuration error: %s", e.msg)
+            logging.critical("Configuration failed to load - failing")
+            return
 
     # only do this if we're told to
     if 'pidfile' in args:

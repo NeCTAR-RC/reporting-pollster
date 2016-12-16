@@ -25,6 +25,14 @@ from reporting_pollster.common.config import Config
 import entities
 
 
+class TableNotFound(Exception):
+    """
+    A handler for the requested table was not found
+    """
+    def __init__(self, table):
+        self.table = table
+
+
 class Entity(object):
     """
     Top level generic - all entities inherit from this
@@ -69,7 +77,21 @@ class Entity(object):
             except AttributeError:
                 pass
 
+        if not entity:
+            raise TableNotFound(table)
+
         return entity(args)
+
+    @classmethod
+    def get_table_names(cls):
+        accum = []
+        for i in dir(entities.entities):
+            entity = getattr(entities.entities, i)
+            try:
+                accum.append(getattr(entity, 'table'))
+            except AttributeError:
+                pass
+        return accum
 
     def dup_record(self, record):
         """

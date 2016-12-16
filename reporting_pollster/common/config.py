@@ -3,11 +3,16 @@
 #
 
 import os.path
-import sys
 import logging
 from ConfigParser import SafeConfigParser
 from reporting_pollster.common import credentials
 from novaclient import client as nvclient
+
+
+class ConfigError(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
 
 config_file = "./reporting.conf"
 
@@ -62,8 +67,9 @@ def verify_nova_creds(nova_version, creds):
     try:
         client.availability_zones.list()
     except Exception as e:
-        logging.critical("Exception returned: %s", e.message)
-        sys.exit(1)
+        raise ConfigError(
+            "Validating Nova credentials failed: %s" % (e.message)
+        )
 
 
 class Config(object):
@@ -85,8 +91,7 @@ class Config(object):
         cls.config_file = filename
         logging.info("Loading configuration from %s", filename)
         if not os.path.isfile(filename):
-            logging.critical("Configuration file not found - failing")
-            sys.exit(1)
+            raise ConfigError("Configuration file %s not found" % (filename))
         cls.remote = None
         cls.local = None
         cls.nova = None
@@ -97,14 +102,11 @@ class Config(object):
         parser = SafeConfigParser()
         parser.read(filename)
         if not parser.has_section('remote'):
-            logging.critical("No remote database configuration - failing")
-            sys.exit(1)
+            raise ConfigError("No Remote DB Config")
         if not parser.has_section('local'):
-            logging.critical("No local database configuration - failing")
-            sys.exit(1)
+            raise ConfigError("No Local DB Config")
         if not parser.has_section('nova') and cls.nova is None:
-            logging.critical("No nova credentials provided - failing")
-            sys.exit(1)
+            raise ConfigError("No Nova Creds")
 
         creds = {}
         for (name, value) in parser.items('remote'):
@@ -121,8 +123,7 @@ class Config(object):
             try:
                 cls.nova = cls.extract_nova_version(creds)
             except KeyError:
-                logging.critical("No valid nova credentials found - failing")
-                sys.exit(1)
+                raise ConfigError("No Valid Nova Creds")
         if not parser.has_section('databases'):
             logging.info("No database mapping defined - using default")
             cls.dbs = dbs
@@ -131,8 +132,7 @@ class Config(object):
             for (name, value) in parser.items('databases'):
                 cls.dbs[name] = value
             if dbs.keys() != cls.dbs.keys():
-                logging.critical("Database mapping doesn't match")
-                sys.exit(1)
+                raise ConfigError("Invalid DB Mapping")
         verify_nova_creds(cls.nova_api_version, cls.nova)
 
     @classmethod
