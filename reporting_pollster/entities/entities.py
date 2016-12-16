@@ -318,6 +318,16 @@ class Entity(object):
         cursor.execute(self.metadata_update, (table, ))
         DB.local().commit()
 
+    @staticmethod
+    def _begin(conn):
+        """Older versions of pymysql don't support a begin() or
+        start_transaction(), so we wrap that functionality here
+        """
+        try:
+            conn.begin()
+        except AttributeError:
+            pass
+
 
 class Aggregate(Entity):
     """
@@ -418,7 +428,7 @@ class Aggregate(Entity):
         # everything and start afresh with each update. To avoid people seeing
         # things in an odd state we need to wrap this in a transaction.
         if not self.dry_run:
-            DB.local().start_transaction()
+            self._begin(DB.local)
             cursor = DB.local_cursor()
             self._run_sql_cursor(cursor, 'aggregate_host_cleanup')
             self._load_many('aggregate_host', self.agg_host_data)
