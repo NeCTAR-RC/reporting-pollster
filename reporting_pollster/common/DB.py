@@ -10,8 +10,7 @@ from reporting_pollster.common.config import Config
 
 
 class DB(object):
-    """
-    Wrap the database connections.
+    """Wrap the database connections.
     """
 
     remote_creds = None

@@ -15,27 +15,27 @@
 # in memory while it was working, but wouldn't try to map each chunk to an
 # in-memory object.
 
-import pickle
-import logging
 from datetime import datetime
 from datetime import timedelta
+import logging
+import pickle
+
 from novaclient import client as nvclient
-from reporting_pollster.common.DB import DB
+
 from reporting_pollster.common.config import Config
-import entities
+from reporting_pollster.common.DB import DB
+from reporting_pollster import entities
 
 
 class TableNotFound(Exception):
-    """
-    A handler for the requested table was not found
+    """A handler for the requested table was not found
     """
     def __init__(self, table):
         self.table = table
 
 
 class Entity(object):
-    """
-    Top level generic - all entities inherit from this
+    """Top level generic - all entities inherit from this
 
     Required methods raise NotImplementedError()
     """
@@ -62,9 +62,7 @@ class Entity(object):
 
     @classmethod
     def from_table_name(cls, table, args):
-        """
-        Get an entity object given the table name
-        """
+        """Get an entity object given the table name"""
         entity = None
         for i in dir(entities.entities):
             entity = getattr(entities.entities, i)
@@ -100,8 +98,7 @@ class Entity(object):
         return accum
 
     def dup_record(self, record):
-        """
-        Trivial utility method.
+        """Trivial utility method.
         Probably doesn't seem important, but it avoids any confusion between
         the return type of the database query (which may simply emulate a dict
         type) and a "real" dict
@@ -112,8 +109,7 @@ class Entity(object):
         return t
 
     def _format_query(self, qname):
-        """
-        This is designed to handle the case where the database name is
+        """This is designed to handle the case where the database name is
         non-standard. Database names in the relevant queries need to be
         converted to format string entities like '{nova}' or '{keystone}' for
         this to work.
@@ -151,8 +147,7 @@ class Entity(object):
         logging.debug("Query: %s", query % {'last_update': self.last_update})
 
     def _extract_no_last_update(self):
-        """
-        Can be used when no last_update is available for this entity
+        """Can be used when no last_update is available for this entity
         """
         if self.dry_run:
             self._extract_dry_run()
@@ -160,8 +155,7 @@ class Entity(object):
             self._extract_all()
 
     def _extract_with_last_update(self):
-        """
-        Can be used when a last_update value is meaningfull for this entity
+        """Can be used when a last_update value is meaningfull for this entity
         """
         self.last_update = self.get_last_update()
         if 'force_update' in self.args:
@@ -178,8 +172,7 @@ class Entity(object):
         method()
 
     def extract(self):
-        """
-        Extract, from whatever sources are necessary, the data that this
+        """Extract, from whatever sources are necessary, the data that this
         entity requires
 
         This may make use of one of the utility functions above.
@@ -187,8 +180,7 @@ class Entity(object):
         raise NotImplementedError()
 
     def transform(self):
-        """
-        Transform the data loaded via extract() into the format to be loaded
+        """Transform the data loaded via extract() into the format to be loaded
         using load()
         """
         raise NotImplementedError()
@@ -244,8 +236,7 @@ class Entity(object):
             cursor.execute(q)
 
     def load(self):
-        """
-        Load data about this entity into the data store.
+        """Load data about this entity into the data store.
         """
         raise NotImplementedError()
 
@@ -259,8 +250,7 @@ class Entity(object):
         return msg
 
     def process(self):
-        """
-        Wrapper for the extract/load loop
+        """Wrapper for the extract/load loop
         """
         logging.debug("Processing table %s", self.table)
         self.extract()
@@ -286,8 +276,7 @@ class Entity(object):
 
     @classmethod
     def _get_last_update(cls, table):
-        """
-        Get the time that the data was updated most recently, so that we can
+        """Get the time that the data was updated most recently, so that we can
         process only the updated data.
         """
         cursor = DB.local_cursor()
@@ -311,8 +300,7 @@ class Entity(object):
         return last_update
 
     def set_last_update(self, table=None):
-        """
-        Set the last_update field to the current time for the given table
+        """Set the last_update field to the current time for the given table
         """
         if not table:
             table = self.table
@@ -336,8 +324,7 @@ class Entity(object):
 
 
 class Aggregate(Entity):
-    """
-    Aggregate entity, which is used by OpenStack as part of its scheduling
+    """Aggregate entity, which is used by OpenStack as part of its scheduling
     logic. Sadly, this is probably entirely API dependant.
     """
 
@@ -444,8 +431,7 @@ class Aggregate(Entity):
 
 
 class Hypervisor(Entity):
-    """
-    Hypervisor entity, uses the hypervisor table locally and the
+    """Hypervisor entity, uses the hypervisor table locally and the
     nova.compute_nodes table on the remote end. This may also make use of the
     nova apis for some information.
     """
@@ -530,8 +516,7 @@ class Hypervisor(Entity):
 
 
 class Project(Entity):
-    """
-    Project entity, using the project table locally and the keystone.project
+    """Project entity, using the project table locally and the keystone.project
     table remotely. Also the allocations database, and probably the keystone
     apis too.
     """
@@ -717,8 +702,7 @@ class Project(Entity):
 
 
 class User(Entity):
-    """
-    User entity, using the user table locally and the keystone.user table
+    """User entity, using the user table locally and the keystone.user table
     remotely, along with the rcshibboleth.user table.
     """
     queries = {
@@ -760,8 +744,7 @@ class User(Entity):
 
 
 class Role(Entity):
-    """
-    Roles map between users and entities. This is a subset of the full range
+    """Roles map between users and entities. This is a subset of the full range
     of mappings listed in keystone.roles, filtered to include only the
     user/project relations.
     """
@@ -808,8 +791,7 @@ class Role(Entity):
 
 
 class Flavour(Entity):
-    """
-    Flavour entity, using the flavour table locally and the nova.instance_types
+    """Flavour entity, using the flavour table locally and the nova.instance_types
     table remotely.
     """
 
@@ -859,8 +841,7 @@ class Flavour(Entity):
 
 
 class Instance(Entity):
-    """
-    Instance entity, using the instance table locally and the nova.instances
+    """Instance entity, using the instance table locally and the nova.instances
     table remotely.
     """
     queries = {
@@ -1028,8 +1009,7 @@ class Instance(Entity):
 
 
 class Volume(Entity):
-    """
-    Volume entity, using the volume table locally and the cinder.volumes table
+    """Volume entity, using the volume table locally and the cinder.volumes table
     remotely.
     """
     queries = {
@@ -1086,8 +1066,7 @@ class Volume(Entity):
 
 
 class Image(Entity):
-    """
-    Image entity, using the image table locally and the glance.image table
+    """Image entity, using the image table locally and the glance.image table
     remotely.
     """
     queries = {
@@ -1136,8 +1115,7 @@ class Image(Entity):
 
 
 class Allocation(Entity):
-    """
-    Allocation data, using the allocation table locally and the
+    """Allocation data, using the allocation table locally and the
     dashboard.rcallocation_allocationrequest table remotely.
     """
     queries = {

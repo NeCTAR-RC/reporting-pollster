@@ -1,15 +1,19 @@
 #!/usr/bin/env python
 import copy
-import unittest
-from mock import MagicMock, patch
-from reporting_pollster.entities.entities import Entity
-from reporting_pollster.entities.entities import Aggregate
-from reporting_pollster.entities.entities import Hypervisor
-from reporting_pollster.entities.entities import Project
-from reporting_pollster.entities.entities import Instance
-from reporting_pollster.entities.entities import Allocation
-import pickle
 import datetime
+import pickle
+import unittest
+
+from mock import MagicMock
+from mock import patch
+
+from reporting_pollster.entities.entities import Aggregate
+from reporting_pollster.entities.entities import Allocation
+from reporting_pollster.entities.entities import Entity
+from reporting_pollster.entities.entities import Hypervisor
+from reporting_pollster.entities.entities import Instance
+from reporting_pollster.entities.entities import Project
+
 
 # What to test . . .
 #
@@ -90,7 +94,7 @@ hypervisor_data = [
         "hypervisor_hostname": "test01.example.com",
         "host_ip": "1.2.3.1",
         "vcpus": 32,
-        "memory_mb": 256*1024,
+        "memory_mb": 256 * 1024,
         "local_gb": 2000,
     },
     {
@@ -98,7 +102,7 @@ hypervisor_data = [
         "hypervisor_hostname": "test02.example.com",
         "host_ip": "1.2.3.2",
         "vcpus": 32,
-        "memory_mb": 256*1024,
+        "memory_mb": 256 * 1024,
         "local_gb": 2000,
     },
     {
@@ -106,7 +110,7 @@ hypervisor_data = [
         "hypervisor_hostname": "test03.example.com",
         "host_ip": "1.2.3.3",
         "vcpus": 32,
-        "memory_mb": 256*1024,
+        "memory_mb": 256 * 1024,
         "local_gb": 2000,
     },
     {
@@ -114,7 +118,7 @@ hypervisor_data = [
         "hypervisor_hostname": "test04.example.com",
         "host_ip": "1.2.3.4",
         "vcpus": 32,
-        "memory_mb": 256*1024,
+        "memory_mb": 256 * 1024,
         "local_gb": 2000,
     },
     {
@@ -122,7 +126,7 @@ hypervisor_data = [
         "hypervisor_hostname": "test05.example.com",
         "host_ip": "1.2.3.5",
         "vcpus": 32,
-        "memory_mb": 256*1024,
+        "memory_mb": 256 * 1024,
         "local_gb": 2000,
     },
 ]
@@ -138,7 +142,7 @@ proj_db_data = [
         'has_instances': False,
         'quota_instances': 100,
         'quota_vcpus': 200,
-        'quota_memory': 2048*1024*1024,
+        'quota_memory': 2048 * 1024 * 1024,
         'quota_volume_total': 100000,
         'quota_snapshots': 35,
         'quota_volume_count': 50,
@@ -152,7 +156,7 @@ proj_db_data = [
         'has_instances': False,
         'quota_instances': 50,
         'quota_vcpus': 100,
-        'quota_memory': 2048*1024*1024,
+        'quota_memory': 2048 * 1024 * 1024,
         'quota_volume_total': 500000,
         'quota_snapshots': 35,
         'quota_volume_count': 20,
@@ -166,7 +170,7 @@ proj_db_data = [
         'has_instances': False,
         'quota_instances': 2,
         'quota_vcpus': 2,
-        'quota_memory': 2048*1024,
+        'quota_memory': 2048 * 1024,
         'quota_volume_total': 0,
         'quota_snapshots': 0,
         'quota_volume_count': 0,

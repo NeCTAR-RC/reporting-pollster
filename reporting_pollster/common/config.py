@@ -2,11 +2,13 @@
 # Config setup
 #
 
-import os.path
 import logging
+import os.path
+
 from ConfigParser import SafeConfigParser
-from reporting_pollster.common import credentials
 from novaclient import client as nvclient
+
+from reporting_pollster.common import credentials
 
 
 class ConfigError(Exception):
@@ -45,8 +47,7 @@ dbs = {
 
 
 def sanitise_db_creds(creds):
-    """
-    Clean up certain values in the credentials to make sure that the DB driver
+    """Clean up certain values in the credentials to make sure that the DB driver
     doesn't get confused.
     """
     tmp = {}
@@ -73,8 +74,7 @@ def verify_nova_creds(nova_version, creds):
 
 
 class Config(object):
-    """
-    Configuration wrapper class.
+    """Configuration wrapper class.
     """
     remote = None
     local = None
