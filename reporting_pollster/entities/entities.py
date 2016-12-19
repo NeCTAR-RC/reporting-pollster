@@ -91,6 +91,12 @@ class Entity(object):
                 accum.append(getattr(entity, 'table'))
             except AttributeError:
                 pass
+        # this is a bit of a silly workaround, but the instances update process
+        # also updates the project table (as well as a couple of other tables),
+        # and hence needs to run /last/.
+        if 'instance' in accum:
+            accum.remove('instance')
+            accum.append('instance')
         return accum
 
     def dup_record(self, record):
