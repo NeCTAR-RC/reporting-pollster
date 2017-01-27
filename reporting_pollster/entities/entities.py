@@ -44,11 +44,6 @@ class Entity(object):
         "select last_update from metadata "
         "where table_name = %s limit 1"
     )
-    metadata_update = (
-        "insert into metadata (table_name, last_update) "
-        "values (%s, null) "
-        "on duplicate key update last_update = null"
-    )
 
     def __init__(self, args):
         self.args = args
@@ -59,6 +54,23 @@ class Entity(object):
         self.extract_time = timedelta()
         self.transform_time = timedelta()
         self.load_time = timedelta()
+
+        # self.table will appear twice in the metadata update query when it is
+        # executed: first as a string, bound as a placeholder value, and
+        # second as a literal, naming another table. The first occurrence will
+        # be put in place of the %s placeholder in self.metadata_update,
+        # whereas the second occurrence gets inserted here directly to the sql.
+        # This is a bit inconsistent, and also means that if anybody defines
+        # an Entity E with E.table = "Robert'); DROP TABLE Students;--" then
+        # there will be trouble.
+        # Note that the schema specifies that last_update be set on update,
+        # so the "on duplicate" will also cause last_update to be modified.
+        # Entity is an abstract class; self.table is set by the subclass.
+        self.metadata_update = (
+            "insert into metadata (table_name, last_update, row_count) "
+            "values (%s, null, (select count(*) from {table})) "
+            "on duplicate key update row_count=(select count(*) from {table})"
+        ).format(table=self.table)
 
     @classmethod
     def from_table_name(cls, table, args):

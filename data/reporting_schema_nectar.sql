@@ -19,6 +19,7 @@
 create table if not exists metadata (
         table_name varchar(64), -- this should be an enum, but it's not worth doing that until we know what all the tables are
         last_update timestamp default current_timestamp on update current_timestamp,
+        row_count int(11) comment "count(*)",
         primary key (table_name)
 ) comment 'Database metadata';
 

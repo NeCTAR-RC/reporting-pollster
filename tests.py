@@ -9,7 +9,6 @@ from mock import patch
 
 from reporting_pollster.entities.entities import Aggregate
 from reporting_pollster.entities.entities import Allocation
-from reporting_pollster.entities.entities import Entity
 from reporting_pollster.entities.entities import Hypervisor
 from reporting_pollster.entities.entities import Instance
 from reporting_pollster.entities.entities import Project
@@ -542,8 +541,11 @@ class test_all(unittest.TestCase):
     def test_format_query(self, Config, nvclient):
         Config.get_nova.return_value = {"Creds": "Nothing"}
         Config.get_dbs.return_value = {"nova": "not_nova"}
+        Config.get_nova_api_version.return_value = '2'
         nvclient.Client.return_value = "novaclient"
-        entity = Entity(self.args)
+        # can't instantiate Entity, since it's abstract;
+        # can use any subclass that does not override _format_query
+        entity = Aggregate(self.args)
         entity.queries = {"testing": format_query_orig}
         self.assertEqual(entity._format_query('testing'), format_query_correct)
 
