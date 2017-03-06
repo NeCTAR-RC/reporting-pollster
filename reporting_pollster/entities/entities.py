@@ -55,22 +55,16 @@ class Entity(object):
         self.transform_time = timedelta()
         self.load_time = timedelta()
 
-        # self.table will appear twice in the metadata update query when it is
-        # executed: first as a string, bound as a placeholder value, and
-        # second as a literal, naming another table. The first occurrence will
-        # be put in place of the %s placeholder in self.metadata_update,
-        # whereas the second occurrence gets inserted here directly to the sql.
-        # This is a bit inconsistent, and also means that if anybody defines
-        # an Entity E with E.table = "Robert'); DROP TABLE Students;--" then
-        # there will be trouble.
-        # Note that the schema specifies that last_update be set on update,
-        # so the "on duplicate" will also cause last_update to be modified.
-        # Entity is an abstract class; self.table is set by the subclass.
-        self.metadata_update = (
+        # We can't simply use parameters here because you can't specify the
+        # table name as a parameter - it has to be a plain token in the SQL.
+        # Since we're directly manipulating the SQL string, we may as well
+        # drop the quoted table name into the values tuple as well . . .
+        self.metadata_update_template = (
             "insert into metadata (table_name, last_update, row_count) "
-            "values (%s, null, (select count(*) from {table})) "
-            "on duplicate key update row_count=(select count(*) from {table})"
-        ).format(table=self.table)
+            "values ('{table}', null, (select count(*) from {table})) "
+            "on duplicate key update last_update=null, "
+            "row_count=(select count(*) from {table})"
+        )
 
     @classmethod
     def from_table_name(cls, table, args):
@@ -321,7 +315,8 @@ class Entity(object):
             return
 
         cursor = DB.local_cursor(dictionary=False)
-        cursor.execute(self.metadata_update, (table, ))
+        query = self.metadata_update_template.format(**{'table': table})
+        cursor.execute(query)
         DB.local().commit()
 
     @staticmethod
