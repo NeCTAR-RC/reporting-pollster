@@ -438,6 +438,7 @@ class Aggregate(Entity):
             self._run_sql_cursor(cursor, 'aggregate_host_cleanup')
             self._load_many('aggregate_host', self.agg_host_data)
             DB.local().commit()
+            self.set_last_update(table='aggregate_host')
 
         self.load_time = datetime.now() - start
 
