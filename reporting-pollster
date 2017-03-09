@@ -147,7 +147,15 @@ def polling_loop(args):
         try:
             for table in tables:
                 entity = Entity.from_table_name(table, args)
-                entity.process()
+                try:
+                    entity.process()
+                except ClientException as e:
+                    # this is almost certainly a transient error, but we don't
+                    # want to fail the whole update this time around - instead
+                    # we catch this here and continue with the remaining
+                    # updates
+                    logging.warning("Nova Client exception received: %s",
+                                    e.message)
         # one of the tables requested wasn't found
         #
         # This is always a fatal error - if it's not a user error it's a bug
@@ -155,12 +163,6 @@ def polling_loop(args):
         except TableNotFound as e:
             logging.critical("Handler for table %s not found", e.table)
             return
-
-        # in this context a nova ClientException is almost certainly a
-        # transient error, so handle this explicitly
-        except ClientException as e:
-            logging.warning("Nova client exception received: %s",
-                            repr(e))
 
         # capture database connectivity errors.
         #
