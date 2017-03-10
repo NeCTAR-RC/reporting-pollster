@@ -225,6 +225,8 @@ class Entity(object):
         else:
             self._load()
 
+    # Note: this is a low-level function that doesn't do any commits - the
+    # caller is expected to handle database consistency
     def _load_many(self, qname, data):
         q = self._format_query(qname)
         if self.dry_run:
@@ -237,7 +239,7 @@ class Entity(object):
     # seems a bit silly, but this captures the dry_run and debug logic
     #
     # Note: since we don't own the cursor we don't do any cursor-specific
-    # debugging output
+    # debugging output or commits
     def _run_sql_cursor(self, cursor, qname):
         q = self._format_query(qname)
         if self.dry_run:
