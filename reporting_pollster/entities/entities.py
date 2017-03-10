@@ -51,6 +51,7 @@ class Entity(object):
         self.data = []
         self.dry_run = not self.args.full_run
         self.last_update = None
+        self.this_update_start = None
         self.extract_time = timedelta()
         self.transform_time = timedelta()
         self.load_time = timedelta()
@@ -59,10 +60,13 @@ class Entity(object):
         # table name as a parameter - it has to be a plain token in the SQL.
         # Since we're directly manipulating the SQL string, we may as well
         # drop the quoted table name into the values tuple as well . . .
+        #
+        # Adding support for manually setting the last update timestamp.
         self.metadata_update_template = (
             "insert into metadata (table_name, last_update, row_count) "
-            "values ('{table}', null, (select count(*) from {table})) "
-            "on duplicate key update last_update=null, "
+            "values ('{table}', %(last_update)s, "
+            " (select count(*) from {table})) "
+            "on duplicate key update last_update=%(last_update)s, "
             "row_count=(select count(*) from {table})"
         )
 
@@ -259,6 +263,7 @@ class Entity(object):
         """Wrapper for the extract/load loop
         """
         logging.debug("Processing table %s", self.table)
+        self.this_update_start = datetime.now()
         self.extract()
         self.transform()
         self.load()
@@ -305,18 +310,22 @@ class Entity(object):
             logging.debug("Last update: %s", last_update.isoformat())
         return last_update
 
-    def set_last_update(self, table=None):
-        """Set the last_update field to the current time for the given table
+    def set_last_update(self, table=None, last_update=None):
+        """Set the last_update field for the given table
         """
         if not table:
             table = self.table
         if self.dry_run:
             logging.debug("Setting last update on table %s", table)
             return
+        # the user can specify a different last update time, otherwise we use
+        # the start point of the processing loop for this entity
+        if not last_update:
+            last_update = self.this_update_start
 
         cursor = DB.local_cursor(dictionary=False)
         query = self.metadata_update_template.format(**{'table': table})
-        cursor.execute(query)
+        cursor.execute(query, {'last_update': last_update})
         DB.local().commit()
 
     @staticmethod
