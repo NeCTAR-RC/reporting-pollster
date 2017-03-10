@@ -52,6 +52,7 @@ class Entity(object):
         self.dry_run = not self.args.full_run
         self.last_update = None
         self.this_update_start = None
+        self.last_update_window = args.last_update_window
         self.extract_time = timedelta()
         self.transform_time = timedelta()
         self.load_time = timedelta()
@@ -287,17 +288,17 @@ class Entity(object):
             last_update = datetime.now() - timedelta(days=30)
         return last_update
 
-    @classmethod
-    def _get_last_update(cls, table):
+    def _get_last_update(self, table):
         """Get the time that the data was updated most recently, so that we can
         process only the updated data.
         """
         cursor = DB.local_cursor()
-        cursor.execute(cls.metadata_query, (table, ))
+        cursor.execute(self.metadata_query, (table, ))
         row = cursor.fetchone()
         res = None
         if row:
             res = row['last_update']
+            res = res - timedelta(seconds=self.last_update_window)
         return res
 
     def get_last_update(self, table=None):

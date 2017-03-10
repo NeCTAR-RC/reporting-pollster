@@ -63,6 +63,13 @@ def parse_args():
                         help="update the last week's worth of data")
     parser.add_argument('--last-month', action='store_true', required=False,
                         help="update the last month's worth of data")
+    parser.add_argument('--last-update-window', action='store',
+                        required=False, default=86400, type=int,
+                        metavar="WINDOW",
+                        help=(
+                            "Go this many seconds further back when "
+                            "doing a last_update query"
+                            ))
     parser.add_argument('-f', '--full-run', action='store_true',
                         required=False, default=False,
                         help="execute a full query/update run")
@@ -247,6 +254,7 @@ def main():
     polling_loop(args)
 
     logging.info("Finished polling - exiting")
+
 
 if __name__ == '__main__':
     main()
