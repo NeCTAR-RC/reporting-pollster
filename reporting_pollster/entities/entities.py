@@ -1140,8 +1140,8 @@ class Allocation(Entity):
     """
     queries = {
         'query': (
-            "SELECT ra.id, tenant_uuid AS project_id, "
-            "  tenant_name as project_name, contact_email, approver_email, "
+            "SELECT ra.id, project_id, project_name, "
+            "  contact_email, approver_email, "
             "  ci.email as chief_investigator, status, start_date, end_date, "
             "  modified_time, "
             "  field_of_research_1, for_percentage_1, "
@@ -1157,8 +1157,8 @@ class Allocation(Entity):
             "ORDER BY modified_time; "
         ),
         'query_last_update': (
-            "SELECT ra.id, tenant_uuid AS project_id, "
-            "  tenant_name as project_name, contact_email, approver_email, "
+            "SELECT ra.id, project_id, project_name, "
+            "  contact_email, approver_email, "
             "  ci.email as chief_investigator, status, start_date, end_date, "
             "  modified_time, "
             "  field_of_research_1, for_percentage_1, "
