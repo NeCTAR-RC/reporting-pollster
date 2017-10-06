@@ -100,12 +100,20 @@ class Entity(object):
                 accum.append(getattr(entity, 'table'))
             except AttributeError:
                 pass
-        # this is a bit of a silly workaround, but the instances update process
-        # also updates the project table (as well as a couple of other tables),
+        # silly workaround time: the aggregate update process updates the
+        # hypervisor table, so we need the hypervisor update to run first
+        if 'aggregate' in accum:
+            accum.remove('aggregate')
+            accum.append('aggregate')
+        # silly workaround time, part two: the instances update process also
+        # updates the project table (as well as a couple of other tables),
         # and hence needs to run /last/.
         if 'instance' in accum:
             accum.remove('instance')
             accum.append('instance')
+        # Note: this needs a better implementation, with classes declaring
+        # their dependencies and then some algorithmic process coming up with a
+        # processing order.
         return accum
 
     def dup_record(self, record):
@@ -344,7 +352,7 @@ class Entity(object):
 
 class Aggregate(Entity):
     """Aggregate entity, which is used by OpenStack as part of its scheduling
-    logic. Sadly, this is probably entirely API dependant.
+    logic. This pulls its data from the APIs.
     """
 
     # this seems a bit silly, but it allows us to use the load_simple method.
@@ -361,6 +369,10 @@ class Aggregate(Entity):
             "replace into aggregate_host (id, availability_zone, host) "
             "values (%(id)s, %(availability_zone)s, %(host)s)"
         ),
+        'hypervisor_az_update': (
+            "update hypervisor set availability_zone = %(availability_zone)s "
+            "where host = %(host)s"
+        ),
     }
 
     table = "aggregate"
@@ -370,6 +382,7 @@ class Aggregate(Entity):
         self.api_data = []
         self.agg_data = []
         self.agg_host_data = []
+        self.hypervisor_az_data = []
         self.data = []
         novacreds = Config.get_nova()
         version = Config.get_nova_api_version()
@@ -392,6 +405,12 @@ class Aggregate(Entity):
             'host': None,
         }
 
+    def new_hypervisor_az_record(self):
+        return {
+            'availability_zone': None,
+            'host': None,
+        }
+
     def extract(self):
         start = datetime.now()
         # NeCTAR requires hypervisors details from the API
@@ -408,8 +427,23 @@ class Aggregate(Entity):
         # in the same place because the data all comes from one API query.
         for aggregate in self.api_data:
             agg = self.new_agg_record()
-            id = aggregate.id.split('!', 1)[1]
-            (az, id) = id.split('@')
+            # Newton and above moves aggregates out of the cells to the top
+            # level, meaning the aggregate ID format changes from a string
+            # (with routing information) to a globally unique integer. This
+            # makes for a break in the information contained in the
+            # aggregate/aggregate_host tables, but the result will be a little
+            # more meaningful (currently the 'availability_zone' field is
+            # actually the cell name rather than the actual availability zone).
+            #
+            # Note that this code is the canonical source of the hypervisor->AZ
+            # mapping, and hence updates the hypervisor table in addition to
+            # the aggregate and aggregate_host tables.
+            if type(aggregate.id) == int:
+                id = aggregate.id
+                az = aggregate.availability_zone
+            else:
+                id = aggregate.id.split('!', 1)[1]
+                (az, id) = id.split('@')
             agg['id'] = id
             agg['availability_zone'] = az
             agg['name'] = aggregate.name
@@ -424,6 +458,11 @@ class Aggregate(Entity):
                 h['availability_zone'] = az
                 h['host'] = host.split('.')[0]
                 self.agg_host_data.append(h)
+
+                h = self.new_hypervisor_az_record()
+                h['availability_zone'] = az
+                h['host'] = host.split('.')[0]
+                self.hypervisor_az_data.append(h)
 
         self.data = self.agg_data
         self.transform_time = datetime.now() - start
@@ -447,13 +486,18 @@ class Aggregate(Entity):
             DB.local().commit()
             self.set_last_update(table='aggregate_host')
 
+            # update the hypervisor table with the correct availability zone
+            self._begin(DB.local)
+            self._load_many('hypervisor_az_update', self.hypervisor_az_data)
+            DB.local().commit()
+            self.set_last_update(table='hypervisor')
+
         self.load_time = datetime.now() - start
 
 
 class Hypervisor(Entity):
-    """Hypervisor entity, uses the hypervisor table locally and the
-    nova.compute_nodes table on the remote end. This may also make use of the
-    nova apis for some information.
+    """Hypervisor entity. This uses the hypervisor table locally, and gets its
+    source data from the Nova APIs.
     """
 
     queries = {
@@ -469,9 +513,9 @@ class Hypervisor(Entity):
         ),
         'update': (
             "replace into hypervisor "
-            "(id, availability_zone, hostname, ip_address, cpus, memory, "
-            "local_storage, last_seen) "
-            "values (%(id)s, %(availability_zone)s, %(hostname)s, "
+            "(id, availability_zone, host, hostname, ip_address, cpus, "
+            "memory, local_storage, last_seen) "
+            "values (%(id)s, %(availability_zone)s, %(host)s, %(hostname)s, "
             "%(ip_address)s, %(cpus)s, %(memory)s, %(local_storage)s, null)"
         ),
     }
@@ -495,6 +539,7 @@ class Hypervisor(Entity):
         return {
             'id': None,
             'availability_zone': None,
+            'host': None,
             'hostname': None,
             'ip_address': None,
             'cpus': None,
@@ -516,11 +561,17 @@ class Hypervisor(Entity):
         start = datetime.now()
         for hypervisor in self.api_data:
             r = self.new_record()
-            # the cell/hypervisor id is in the form:
-            # nectar!cell@id, where the cell is the availability zone.
+            # here the availability zone is actually the cell name, for
+            # historical reasons. With the change to Newton, this will become
+            # the actual availability zone, with this table updated by the
+            # aggregate update process (which is the canonical source of the
+            # hypervisor->aggregate->AZ mapping). This update makes use of the
+            # host part of the hypervisor_hostname field, which is used by nova
+            # as the key in the host aggregate relationship.
             (az, hid) = hypervisor.id.split('!', 1)[1].split('@')
             r['id'] = hid
             r['availability_zone'] = az
+            r['host'] = hypervisor.hypervisor_hostname.split('.')[0]
             r['hostname'] = hypervisor.hypervisor_hostname
             r['ip_address'] = hypervisor.host_ip
             r['cpus'] = hypervisor.vcpus

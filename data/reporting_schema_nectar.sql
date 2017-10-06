@@ -38,6 +38,7 @@ create table if not exists metadata (
 create table if not exists hypervisor (
         id int(11) comment 'Compute node identifier',
         availability_zone varchar(255) comment 'Compute node availability zone',
+        host varchar(255) comment 'Host part of the hostname',
         hostname varchar(255) comment 'Compute node hostname',
         ip_address varchar(39) comment 'Compute node IP address',
         cpus int(11) comment 'Number of installed CPU cores',
