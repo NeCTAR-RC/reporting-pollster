@@ -196,6 +196,7 @@ create table if not exists aggregate_host (
         id int(11),
         availability_zone varchar(255) comment 'Availability zone this aggregate is defined on',
         host varchar(255) comment 'Host name, same as first part of hypervisor.hostname',
+        last_seen timestamp default current_timestamp on update current_timestamp comment 'last seen',
         primary key (id, availability_zone, host)
 ) comment 'Active (non-deleted) mappings between aggregates and hosts';
 

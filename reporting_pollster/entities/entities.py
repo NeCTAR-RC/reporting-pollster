@@ -473,21 +473,25 @@ class Aggregate(Entity):
         # the aggregate table is simple to deal with.
         self._load_simple()
 
-        # we need to be a little careful with the aggregate_host table, because
-        # it's a real pain to know if hosts have been removed (we capture all
-        # the additions, of course, but not the removals). So we need to delete
-        # everything and start afresh with each update. To avoid people seeing
-        # things in an odd state we need to wrap this in a transaction.
+        # the aggregate_host table is a pretty simple many to many mapping
+        # (hosts can be in more than one aggregate). This is the authoritative
+        # method of determining the availability zone that hypervisors are
+        # members of.
+        #
+        # Because there's no temporal data associated with any of this we're
+        # adding our own - a simple 'last_seen' timestamp which will allow
+        # users of this data to figure out which entries are current and which
+        # are historical (and at the same time they'll be able to track the
+        # history of the data).
+        #
+        # To make sure that the aggregate_host data and the hypervisor data is
+        # consistent, we wrap the whole thing in a transaction.
         if not self.dry_run:
             self._begin(DB.local)
-            cursor = DB.local_cursor()
-            self._run_sql_cursor(cursor, 'aggregate_host_cleanup')
             self._load_many('aggregate_host', self.agg_host_data)
-            DB.local().commit()
             self.set_last_update(table='aggregate_host')
 
             # update the hypervisor table with the correct availability zone
-            self._begin(DB.local)
             self._load_many('hypervisor_az_update', self.hypervisor_az_data)
             DB.local().commit()
             self.set_last_update(table='hypervisor')
