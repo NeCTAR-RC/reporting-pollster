@@ -156,7 +156,7 @@ create table if not exists image (
         id varchar(36) comment 'Image UUID',
         project_id varchar(36) comment 'Project ID that owns this image',
         name varchar(255) comment 'Image display name',
-        size int comment 'Size of image in MB',
+        size bigint(20) comment 'Size of image in bytes',
         -- TODO: It would be nice if status were an enum, and if the view layer could somehow see that.
         status varchar(30) comment 'Current status of image',
         public boolean default false comment 'Is this image publically available',
