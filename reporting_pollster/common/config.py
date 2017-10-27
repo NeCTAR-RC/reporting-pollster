@@ -6,6 +6,8 @@ import logging
 import os.path
 
 from ConfigParser import SafeConfigParser
+from keystoneauth1 import loading
+from keystoneauth1 import session
 from novaclient import client as nvclient
 
 from reporting_pollster.common import credentials
@@ -62,7 +64,7 @@ def sanitise_db_creds(creds):
 
 
 def verify_nova_creds(nova_version, creds):
-    client = nvclient.Client(nova_version, **creds)
+    client = Config.get_nova_client(nova_version, creds)
     # will return success quickly or fail quickly
     logging.debug("Testing nova credentials")
     try:
@@ -203,3 +205,14 @@ class Config(object):
         if not cls.dbs:
             cls.load_defaults()
         return cls.dbs
+
+    @classmethod
+    def get_nova_client(cls, nova_version=None, creds=None):
+        if not nova_version:
+            nova_version = cls.get_nova_api_version()
+        if not creds:
+            creds = cls.get_nova()
+        loader = loading.get_plugin_loader("password")
+        auth = loader.load_from_options(**creds)
+        sess = session.Session(auth=auth)
+        return nvclient.Client(nova_version, session=sess)

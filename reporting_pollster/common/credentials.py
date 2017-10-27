@@ -9,9 +9,17 @@ def get_nova_credentials():
     d = {}
     d['version'] = '2'
     d['username'] = os.environ['OS_USERNAME']
-    d['api_key'] = os.environ['OS_PASSWORD']
+    try:
+        d['user_domain_name'] = os.environ['OS_USER_DOMAIN_NAME']
+    except KeyError:
+        d['user_domain_name'] = 'default'
+    d['password'] = os.environ['OS_PASSWORD']
     d['auth_url'] = os.environ['OS_AUTH_URL']
-    d['project_id'] = os.environ['OS_TENANT_NAME']
+    d['project_name'] = os.environ['OS_PROJECT_NAME']
+    try:
+        d['project_domain_name'] = os.environ['OS_PROJECT_NAME']
+    except KeyError:
+        d['project_domain_name'] = 'default'
     return d
 
 

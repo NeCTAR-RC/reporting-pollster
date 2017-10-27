@@ -20,8 +20,6 @@ from datetime import timedelta
 import logging
 import pickle
 
-from novaclient import client as nvclient
-
 from reporting_pollster.common.config import Config
 from reporting_pollster.common.DB import DB
 from reporting_pollster import entities
@@ -384,9 +382,7 @@ class Aggregate(Entity):
         self.agg_host_data = []
         self.hypervisor_az_data = []
         self.data = []
-        novacreds = Config.get_nova()
-        version = Config.get_nova_api_version()
-        self.novaclient = nvclient.Client(version, **novacreds)
+        self.novaclient = Config.get_nova_client()
 
     def new_agg_record(self):
         return {
@@ -531,9 +527,7 @@ class Hypervisor(Entity):
         self.db_data = []
         self.api_data = []
         self.data = []
-        novacreds = Config.get_nova()
-        version = Config.get_nova_api_version()
-        self.novaclient = nvclient.Client(version, **novacreds)
+        self.novaclient = Config.get_nova_client()
 
     # PUll all the data from whatever sources we need, and assemble them here
     #
