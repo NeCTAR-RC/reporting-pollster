@@ -114,7 +114,7 @@ create table if not exists flavour (
 create table if not exists instance (
         project_id varchar(36) comment 'Project UUID that owns this instance',
         id varchar(36) comment 'Instance UUID',
-        name varchar(64) comment 'Instance name',
+        name varchar(255) comment 'Instance name',
         vcpus int comment 'Allocated number of vCPUs',
         memory int comment 'Allocated memory in MB',
         root int comment 'Size of root disk in GB',
