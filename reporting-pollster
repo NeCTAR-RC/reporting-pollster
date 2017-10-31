@@ -143,14 +143,22 @@ def polling_loop(args):
                      time.strftime("%Y-%m-%d %X %Z",
                                    time.localtime()))
         start = time.time()
-        tables = Entity.get_table_names()
+
+        # get the list of tables to update
+        user_tables = None
         if 'tables' in args:
             if 'poll' in args and args.poll:
                 logging.critical(
                     "Cannot poll when not doing a complete table set"
                 )
                 return
-            tables = args.tables
+            user_tables = args.tables
+        tables = Entity.get_table_names(user_tables=user_tables)
+
+        # invalidate any cached data before starting the iteration
+        Entity.drop_cached_data()
+
+        # process all requested tables
         try:
             for table in tables:
                 entity = Entity.from_table_name(table, args)

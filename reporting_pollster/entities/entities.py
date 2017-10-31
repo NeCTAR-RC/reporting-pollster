@@ -42,6 +42,8 @@ class Entity(object):
         "select last_update from metadata "
         "where table_name = %s limit 1"
     )
+    # The class level data cache
+    _cache = {}
 
     def __init__(self, args):
         self.args = args
@@ -90,29 +92,77 @@ class Entity(object):
         return entity(args)
 
     @classmethod
-    def get_table_names(cls):
-        accum = []
+    def get_table_names(cls, user_tables=None):
+        # no need for order here, just membership and intersection
+        tables = set()
         for i in dir(entities.entities):
             entity = getattr(entities.entities, i)
             try:
-                accum.append(getattr(entity, 'table'))
+                tables.add(getattr(entity, 'table'))
             except AttributeError:
                 pass
-        # silly workaround time: the aggregate update process updates the
-        # hypervisor table, so we need the hypervisor update to run first
-        if 'aggregate' in accum:
-            accum.remove('aggregate')
-            accum.append('aggregate')
-        # silly workaround time, part two: the instances update process also
-        # updates the project table (as well as a couple of other tables),
-        # and hence needs to run /last/.
-        if 'instance' in accum:
-            accum.remove('instance')
-            accum.append('instance')
-        # Note: this needs a better implementation, with classes declaring
-        # their dependencies and then some algorithmic process coming up with a
-        # processing order.
-        return accum
+        if user_tables:
+            # we take the intersection of the two sets here
+            user_tables = set(user_tables)
+        # back to an ordered form now
+            tables = user_tables & tables
+        tables = [t for t in tables]
+        # silly workaround time: the aggregate update process caches data that
+        # the hypervisor update process relies on, so we push the hypervisor
+        # update to the end of the list
+        if 'hypervisor' in tables:
+            tables.remove('hypervisor')
+            tables.append('hypervisor')
+        # XXX: the hypervisor table /must/ run with the aggregate table - I
+        # need to figure out a way to handle that with user specified lists of
+        # tables . . .
+        #
+        # silly workaround time, part two: the instances update process caches
+        # data that the project table update requires, so push the project
+        # update to the end of the list
+        if 'project' in tables:
+            tables.remove('project')
+            tables.append('project')
+        # XXX: they project table /must/ run with the instances table. As
+        # above, that requires some thought when dealing with user specified
+        # table lists. The 'has_instances' column is a shortcut column, so it
+        # may not be that much of an issue in practise, but that needs to be
+        # looked into.
+        #
+        # It's also worth noting that this is an issue right now - the next
+        # instance table update will update the has_instances column, but only
+        # for projects that have instances mentioned in the last_update period,
+        # with only a full instance table update capturing everything. I'm not
+        # sure how best to handle this - possibly with a local query against
+        # the existing reporting.instance data?
+        #
+        # Note: this whole dependency thing needs a better implementation, with
+        # classes declaring their dependencies and then some algorithmic
+        # process coming up with a processing order.
+        return tables
+
+    @classmethod
+    def _cache_data(cls, key, data):
+        """Stash some data in a class-level cache so that it can be re-used by
+        other Entity object instantiations. This is used to support derived
+        updates across multiple Entity object instantiations within a single
+        run.
+        """
+        # the implementation is stupid simple . . .
+        cls._cache[key] = data
+
+    @classmethod
+    def _get_cached_data(cls, key):
+        """Retrieve data cached by another (or potentially this) Entity object
+        instantiation.
+        """
+        return cls._cache[key]
+
+    @classmethod
+    def drop_cached_data(cls):
+        """Drop any cached data.
+        """
+        cls._cache = {}
 
     def dup_record(self, record):
         """Trivial utility method.
@@ -380,7 +430,7 @@ class Aggregate(Entity):
         self.api_data = []
         self.agg_data = []
         self.agg_host_data = []
-        self.hypervisor_az_data = []
+        self.hypervisor_az_data = {}
         self.data = []
         self.novaclient = Config.get_nova_client()
 
@@ -397,12 +447,6 @@ class Aggregate(Entity):
     def new_agg_host_record(self):
         return {
             'id': None,
-            'availability_zone': None,
-            'host': None,
-        }
-
-    def new_hypervisor_az_record(self):
-        return {
             'availability_zone': None,
             'host': None,
         }
@@ -449,18 +493,17 @@ class Aggregate(Entity):
             self.agg_data.append(agg)
 
             for host in aggregate.hosts:
+                hname = host.split('.')[0]
                 h = self.new_agg_host_record()
                 h['id'] = id
                 h['availability_zone'] = az
-                h['host'] = host.split('.')[0]
+                h['host'] = hname
                 self.agg_host_data.append(h)
 
-                h = self.new_hypervisor_az_record()
-                h['availability_zone'] = az
-                h['host'] = host.split('.')[0]
-                self.hypervisor_az_data.append(h)
+                self.hypervisor_az_data[hname] = az
 
         self.data = self.agg_data
+        Entity._cache_data('hypervisor_az', self.hypervisor_az_data)
         self.transform_time = datetime.now() - start
 
     def load(self):
@@ -480,17 +523,15 @@ class Aggregate(Entity):
         # are historical (and at the same time they'll be able to track the
         # history of the data).
         #
-        # To make sure that the aggregate_host data and the hypervisor data is
-        # consistent, we wrap the whole thing in a transaction.
+        # Note that there's a window here where the hypervisor table and the
+        # aggregate table can get out of sync - we've cached the hypervisor/AZ
+        # mapping /now/, but if there are changes between now and when the
+        # hypervisor queries happen they can be out of sync. There's no way to
+        # avoid this, though, outside of wrapping /everything/ in a big
+        # transaction, which I'd really like to avoid.
         if not self.dry_run:
-            self._begin(DB.local)
             self._load_many('aggregate_host', self.agg_host_data)
             self.set_last_update(table='aggregate_host')
-
-            # update the hypervisor table with the correct availability zone
-            self._load_many('hypervisor_az_update', self.hypervisor_az_data)
-            DB.local().commit()
-            self.set_last_update(table='hypervisor')
 
         self.load_time = datetime.now() - start
 
@@ -528,6 +569,7 @@ class Hypervisor(Entity):
         self.api_data = []
         self.data = []
         self.novaclient = Config.get_nova_client()
+        self.hypervisor_az_data = {}
 
     # PUll all the data from whatever sources we need, and assemble them here
     #
@@ -552,6 +594,10 @@ class Hypervisor(Entity):
             self.api_data = self.novaclient.hypervisors.list()
         else:
             logging.info("Extracting API data for the hypervisor table")
+        try:
+            self.hypervisor_az_data = Entity._get_cached_data("hypervisor_az")
+        except KeyError:
+            pass
         self.extract_time = datetime.now() - start
 
     # ded simple until we have more than one data source
@@ -566,10 +612,16 @@ class Hypervisor(Entity):
             # hypervisor->aggregate->AZ mapping). This update makes use of the
             # host part of the hypervisor_hostname field, which is used by nova
             # as the key in the host aggregate relationship.
-            (az, hid) = hypervisor.id.split('!', 1)[1].split('@')
-            r['id'] = hid
+            (cell, hid) = hypervisor.id.split('!', 1)[1].split('@')
+            hname = hypervisor.hypervisor_hostname.split('.')[0]
+            try:
+                az = self.hypervisor_az_data[hname]
+            except KeyError:
+                # use the cell name - this provides some historical consistency
+                az = cell
+            r['id'] = int(hid)
             r['availability_zone'] = az
-            r['host'] = hypervisor.hypervisor_hostname.split('.')[0]
+            r['host'] = hname
             r['hostname'] = hypervisor.hypervisor_hostname
             r['ip_address'] = hypervisor.host_ip
             r['cpus'] = hypervisor.vcpus
@@ -632,10 +684,10 @@ class Project(Entity):
         'update': (
             "replace into project "
             "(id, display_name, organisation, description, enabled, personal, "
-            "quota_instances, quota_vcpus, quota_memory, quota_volume_total, "
-            "quota_snapshot, quota_volume_count) "
+            "has_instances, quota_instances, quota_vcpus, quota_memory, "
+            "quota_volume_total, quota_snapshot, quota_volume_count) "
             "values (%(id)s, %(display_name)s, %(organisation)s, "
-            "%(description)s, %(enabled)s, %(personal)s, "
+            "%(description)s, %(enabled)s, %(personal)s, %(has_instances)s, "
             "%(quota_instances)s, %(quota_vcpus)s, %(quota_memory)s, "
             "%(quota_volume_total)s, %(quota_snapshots)s, "
             "%(quota_volume_count)s)"
@@ -664,6 +716,8 @@ class Project(Entity):
         super(Project, self).__init__(args)
         self.db_data = []
         self.tenant_owner_data = []
+        self.tenant_member_data = []
+        self.has_instance_data = {}
 
     def new_record(self):
         return {
@@ -673,6 +727,7 @@ class Project(Entity):
             'description': None,
             'enabled': None,
             'personal': None,
+            'has_instances': False,
             'quota_instances': None,
             'quota_vcpus': None,
             'quota_memory': None,
@@ -689,6 +744,10 @@ class Project(Entity):
         self.tenant_owner_data = cursor.fetchall()
         cursor.execute(self._format_query('tenant_member'))
         self.tenant_member_data = cursor.fetchall()
+        try:
+            self.has_instance_data = Entity._get_cached_data('has_instance')
+        except KeyError:
+            pass
         self.extract_time = datetime.now() - start
 
     def transform(self):
@@ -760,6 +819,9 @@ class Project(Entity):
             # even with all that. In those cases we use the email domain
             if not t['organisation']:
                 t['organisation'] = shib_attr['mail'].split('@')[1]
+            # default is set to False in the new_record() method
+            if t['id'] in self.has_instance_data:
+                t['has_instances'] = True
             self.data.append(t)
 
         self.transform_time = datetime.now() - start
@@ -950,10 +1012,6 @@ class Instance(Entity):
             "(day, vcpus, memory, local_storage) "
             "values (%(day)s, %(vcpus)s, %(memory)s, %(local_storage)s)"
         ),
-        'has_instance_update': (
-            "update project set has_instances = true "
-            "where id = %(project_id)s"
-        ),
     }
 
     table = "instance"
@@ -962,7 +1020,7 @@ class Instance(Entity):
         super(Instance, self).__init__(args)
         self.db_data = []
         self.hist_agg_data = []
-        self.has_instance_data = []
+        self.has_instance_data = {}
 
     def extract(self):
         start = datetime.now()
@@ -977,11 +1035,6 @@ class Instance(Entity):
             'local_storage': 0
         }
 
-    def new_has_instance_update(self, project):
-        return {
-            'project_id': project
-        }
-
     def generate_hist_agg_data(self):
         # the data should be ordered by created_at, so we start by taking the
         # created_at value and use that as the starting point.
@@ -990,7 +1043,6 @@ class Instance(Entity):
                             date.month,
                             date.day)
         hist_agg = {}
-        has_instance_data = []
         if len(self.db_data) > 0:
             # create a list of records to be added to the historical_usate
             # table
@@ -1033,21 +1085,17 @@ class Instance(Entity):
                     hist_agg[key]['local_storage'] += (instance['root'] +
                                                        instance['ephemeral'])
                     day = day + timedelta(1)
-                if instance['project_id'] not in has_instance_data:
-                    has_instance_data.append(instance['project_id'])
+                self.has_instance_data[instance['project_id']] = True
             keys = hist_agg.keys()
             keys.sort()
             for key in keys:
                 self.hist_agg_data.append(hist_agg[key])
-            for proj in has_instance_data:
-                self.has_instance_data.append(
-                    self.new_has_instance_update(proj)
-                )
 
     def transform(self):
         start = datetime.now()
         self.data = self.db_data
         self.generate_hist_agg_data()
+        Entity._cache_data('has_instance', self.has_instance_data)
         self.transform_time = datetime.now() - start
 
     def _load_hist_agg(self):
@@ -1061,18 +1109,10 @@ class Instance(Entity):
             # not, this is for informational purposes only
             self.set_last_update(table="historical_usage")
 
-    def _load_has_instance_data(self):
-        logging.debug("Updating project table with has instance data")
-        if len(self.has_instance_data) > 0 or self.dry_run:
-            self._load_many('has_instance_update',
-                            self.has_instance_data)
-            DB.local().commit()
-
     def load(self):
         start = datetime.now()
         # comment out for sanity while testing
         self._load_simple()
-        self._load_hist_agg()
         self._load_has_instance_data()
         self.load_time = datetime.now() - start
 

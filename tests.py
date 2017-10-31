@@ -25,63 +25,65 @@ from reporting_pollster.entities.entities import Project
 
 aggregate_data = [
     {
-        "id": "nectar!test!test-1@1",
+        "id": 1,
+        "availability_zone": "az1",
         "name": "test-1 aggregate in cell test",
         "created_at": "today",
         "deleted_at": "never",
         "deleted": False,
         "hosts": [
-            "test1.example.com",
-            "test2.example.com",
-            "test3.example.com",
+            "test01",
+            "test02",
+            "test03",
         ]
     },
     {
-        "id": "nectar!test!test-2@2",
+        "id": 2,
+        "availability_zone": "az2",
         "name": "test-2 aggregate in cell test",
         "created_at": "today",
         "deleted_at": "never",
         "deleted": False,
         "hosts": [
-            "test4.example.com",
-            "test5.example.com",
-            "test6.example.com",
+            "test04",
+            "test05",
+            "test06",
         ]
     },
     {
-        "id": "nectar!test@1",
+        "id": 3,
         "name": "test cell",
         "created_at": "today",
         "deleted_at": "never",
         "deleted": False,
         "hosts": [
-            "test-1.example.com",
-            "test-2.example.com",
-            "test-3.example.com",
+            "test-1",
+            "test-2",
+            "test-3",
         ]
     },
     {
-        "id": "nectar!prod-1@1",
+        "id": 4,
         "name": "prod cell",
         "created_at": "today",
         "deleted_at": "never",
         "deleted": False,
         "hosts": [
-            "prod-01.example.com",
-            "prod-02.example.com",
-            "prod-03.example.com",
+            "prod-01",
+            "prod-02",
+            "prod-03",
         ]
     },
     {
-        "id": "nectar!site-1@1",
+        "id": 5,
         "name": "site-1 cell",
         "created_at": "yesterday",
         "deleted_at": "today",
         "deleted": True,
         "hosts": [
-            "s101.example.com",
-            "s102.example.com",
-            "s103.example.com",
+            "s101",
+            "s102",
+            "s103",
         ]
     }
 ]
@@ -90,6 +92,7 @@ aggregate_data = [
 hypervisor_data = [
     {
         "id": "nectar!test!test-1@1",
+        "host": "test01",
         "hypervisor_hostname": "test01.example.com",
         "host_ip": "1.2.3.1",
         "vcpus": 32,
@@ -98,6 +101,7 @@ hypervisor_data = [
     },
     {
         "id": "nectar!test!test-1@1",
+        "host": "test02",
         "hypervisor_hostname": "test02.example.com",
         "host_ip": "1.2.3.2",
         "vcpus": 32,
@@ -106,6 +110,7 @@ hypervisor_data = [
     },
     {
         "id": "nectar!test!test-1@3",
+        "host": "test03",
         "hypervisor_hostname": "test03.example.com",
         "host_ip": "1.2.3.3",
         "vcpus": 32,
@@ -114,6 +119,7 @@ hypervisor_data = [
     },
     {
         "id": "nectar!test!test-1@4",
+        "host": "test04",
         "hypervisor_hostname": "test04.example.com",
         "host_ip": "1.2.3.4",
         "vcpus": 32,
@@ -122,6 +128,7 @@ hypervisor_data = [
     },
     {
         "id": "nectar!test!test-1@5",
+        "host": "test05",
         "hypervisor_hostname": "test05.example.com",
         "host_ip": "1.2.3.5",
         "vcpus": 32,
@@ -129,6 +136,14 @@ hypervisor_data = [
         "local_gb": 2000,
     },
 ]
+
+hypervisor_az_data = {
+    "test01": "az1",
+    "test02": "az1",
+    "test03": "az1",
+    "test04": "az2",
+    "test05": "az2",
+}
 
 
 proj_db_data = [
@@ -471,14 +486,17 @@ class test_all(unittest.TestCase):
         agg = Aggregate(self.args)
         agg.api_data = create_mock_array(aggregate_data)
         agg.transform()
+        hyp_az_data = Aggregate._get_cached_data('hypervisor_az')
         self.assertEqual(len(agg.agg_data), 5)
         self.assertEqual(len(agg.agg_host_data), 15)
         self.assertEqual(agg.agg_data[0]['active'], True)
         self.assertEqual(agg.agg_data[-1]['active'], False)
         self.assertEqual(agg.agg_host_data[0], {
-                         'id': '1',
-                         'availability_zone': 'test!test-1',
-                         'host': 'test1'})
+                         'id': 1,
+                         'availability_zone': 'az1',
+                         'host': 'test01'})
+        self.assertEqual(hyp_az_data['test01'], 'az1')
+        self.assertEqual(hyp_az_data['test05'], 'az2')
 
     @patch('novaclient.client')
     @patch('reporting_pollster.entities.entities.Config')
@@ -488,9 +506,11 @@ class test_all(unittest.TestCase):
         nvclient.Client.return_value = "novaclient"
         hyp = Hypervisor(self.args)
         hyp.api_data = create_mock_array(hypervisor_data)
+        hyp.hypervisor_az_data = hypervisor_az_data
         hyp.transform()
         self.assertEqual(len(hyp.data), 5)
-        self.assertEqual(hyp.data[0]['availability_zone'], 'test!test-1')
+        self.assertEqual(hyp.data[0]['availability_zone'], 'az1')
+        self.assertEqual(hyp.data[4]['availability_zone'], 'az2')
 
     @patch('novaclient.client')
     @patch('reporting_pollster.entities.entities.Config')
@@ -523,7 +543,7 @@ class test_all(unittest.TestCase):
         inst.db_data = copy.deepcopy(instance_data)
         inst.transform()
         self.assertEqual(len(inst.has_instance_data), 2)
-        self.assertEqual(inst.has_instance_data[0]['project_id'], 'uuid1')
+        self.assertEqual(inst.has_instance_data['uuid1'], True)
         self.assertEqual(inst.hist_agg_data[0]['vcpus'], 1)
         self.assertEqual(inst.hist_agg_data[1]['vcpus'], 6)
         self.assertEqual(inst.hist_agg_data[2]['vcpus'], 2)
