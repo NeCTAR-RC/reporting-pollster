@@ -1113,7 +1113,7 @@ class Instance(Entity):
         start = datetime.now()
         # comment out for sanity while testing
         self._load_simple()
-        self._load_has_instance_data()
+        self._load_hist_agg()
         self.load_time = datetime.now() - start
 
 
