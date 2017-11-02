@@ -1,0 +1,10 @@
+[Unit]
+Description=OpenStack Reporting Data Polling Service
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/default/reporting-pollster
+ExecStart=/usr/bin/reporting-pollster $DAEMON_ARGS
+
+[Install]
+WantedBy=multi-user.target

@@ -4,7 +4,7 @@
 # Fri, 30 Oct 2015 13:58:51 +1100
 export PYBUILD_NAME=reporting-pollster
 %:
-	dh $@ --with python2 --buildsystem=pybuild
+	dh $@ --with python2,systemd --buildsystem=pybuild
 
 override_dh_installinit:
 	dh_installinit --name=$(PYBUILD_NAME) --no-start
