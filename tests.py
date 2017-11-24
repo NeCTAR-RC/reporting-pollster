@@ -9,6 +9,7 @@ from mock import patch
 
 from reporting_pollster.entities.entities import Aggregate
 from reporting_pollster.entities.entities import Allocation
+from reporting_pollster.entities.entities import Entity
 from reporting_pollster.entities.entities import Hypervisor
 from reporting_pollster.entities.entities import Instance
 from reporting_pollster.entities.entities import Project
@@ -541,6 +542,7 @@ class test_all(unittest.TestCase):
         nvclient.Client.return_value = "novaclient"
         inst = Instance(self.args)
         inst.db_data = copy.deepcopy(instance_data)
+        inst.hypervisor_az_data = hypervisor_az_data
         inst.transform()
         self.assertEqual(len(inst.has_instance_data), 2)
         self.assertEqual(inst.has_instance_data['uuid1'], True)
@@ -553,8 +555,9 @@ class test_all(unittest.TestCase):
         self.assertEqual(inst.hist_agg_data[0]['local_storage'], 70)
         self.assertEqual(inst.hist_agg_data[1]['local_storage'], 310)
         self.assertEqual(inst.hist_agg_data[2]['local_storage'], 140)
-        # the copy of the original data should not have changed
-        self.assertEqual(inst.data, instance_data)
+        # the az should also have been updated
+        self.assertEqual(inst.data[0]['availability_zone'], 'az1')
+        self.assertEqual(inst.data[2]['availability_zone'], 'az2')
 
     @patch('novaclient.client')
     @patch('reporting_pollster.entities.entities.Config')
@@ -582,6 +585,34 @@ class test_all(unittest.TestCase):
         self.assertEqual(allocs.data[2]['id'], 4)
         self.assertIsNone(allocs.data[3]['project_id'])
         self.assertIsNone(allocs.data[4]['project_id'])
+
+    def test_table_dependencies(self):
+        # Note: these tests may be too dependent on how sort() deals with
+        # elements that compare equal to be reliable! It may need to be pared
+        # down to a minimal set that will be ordered entirely by dependencies.
+        self.assertEqual([
+            'aggregate',
+            'allocation',
+            'flavour',
+            'image',
+            'role',
+            'user',
+            'volume',
+            'hypervisor',
+            'instance',
+            'project'
+            ],
+            Entity.get_table_names())
+        self.assertEqual(['aggregate'],
+                Entity.get_table_names(user_tables=['aggregate']))
+        self.assertEqual(['allocation'],
+                Entity.get_table_names(user_tables=['allocation']))
+        self.assertEqual(['aggregate', 'instance'],
+                Entity.get_table_names(user_tables=['instance']))
+        self.assertEqual(['aggregate', 'instance', 'project'],
+                Entity.get_table_names(user_tables=['project']))
+        self.assertEqual(['aggregate', 'hypervisor'],
+                Entity.get_table_names(user_tables=['hypervisor']))
 
 
 if __name__ == '__main__':

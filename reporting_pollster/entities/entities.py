@@ -32,6 +32,13 @@ class TableNotFound(Exception):
         self.table = table
 
 
+class TableDependencyError(Exception):
+    """A dependency error was encountered
+    """
+    def __init__(self, msg):
+        self.msg = msg
+
+
 class Entity(object):
     """Top level generic - all entities inherit from this
 
@@ -93,53 +100,118 @@ class Entity(object):
 
     @classmethod
     def get_table_names(cls, user_tables=None):
-        # no need for order here, just membership and intersection
+        # we resolve dependencies using the following algorithm, based on
+        # Kahn's topological sort algorithm with warts to support a
+        # user-supplied subset of the full depdency list, and the creation of a
+        # full consistent ordering rather than an ordered collection of sets:
+        #
+        # 1) build a map of all supported tables and their dependencies
+        #
+        # 2) build a list containing the intersection of the set of supported
+        # tables with the set of requested tables, filtering out requested
+        # tables that aren't in the supported table list
+        #
+        # 3) for each requested table, add that table's dependencies to the
+        # list of required tables
+        #
+        # 4) repeat step 3 until the required list doesn't change between
+        # iterations (this resolves chained dependencies)
+        #
+        # 5) build a new dependency map including only the required tables
+        # (i.e. requested tables and their dependencies)
+        #
+        # 6) sort the list of required tables based on the length of each
+        # table's dependency list
+        #
+        # 7) remove the first table from the list, verify that it has an empty
+        # dependency list, and append it to the output list. If the first entry
+        # in the list has dependencies this indicates that there are circular
+        # dependencies.
+        #
+        # 8) remove the selected table from all entries in the dependency map
+        #
+        # 9) sort the remainder of the required tables list again based on the
+        # updated dependency map. This avoids a situation where we resolve all
+        # the dependencies of entries further back on the list, but leave
+        # entries with dependencies ahead of them - sorting the list here pulls
+        # all the indepdenent entries to the front of the list, ensuring that
+        # the only way step 7 can fail is if there are genuine circular
+        # dependencies.
+        #
+        # 10) repeat steps 7 through 9 until the required tables list is empty
+        #
+        # 11) raise an error if no entries can be found with an empty
+        # dependency list (this indicates a circular dependency chain)
+        #
+        # Note that at least one table must be independent - have no
+        # dependencies - otherwise this algorithm can't proceed.
+        #
+        # By default no dependencies are defined for a table - each
+        # Entity-based class has to override the Entity level definition to
+        # specify dependencies.
+        #
+        # Why bother with this? Because with data caching during runs the
+        # inter-table dependencies keep getting more complex, and devoting the
+        # effort to come up with a general solution /now/ means that in future
+        # all we have to do is specify data dependencies and it'll be dealt
+        # with automagically.
+
+        # the dependency map
+        dependencies = {}
+
+        # build the set of all supported tables and their dependencies
         tables = set()
         for i in dir(entities.entities):
             entity = getattr(entities.entities, i)
             try:
-                tables.add(getattr(entity, 'table'))
+                table = getattr(entity, 'table')
+                dependencies[table] = entity._get_dependencies()
+                tables.add(table)
             except AttributeError:
                 pass
+
+        # if the user has specified a list of tables we take the intersection
+        # of the supported tables and their requested list (to make sure
+        # they're not asking for invalid tables)
         if user_tables:
-            # we take the intersection of the two sets here
             user_tables = set(user_tables)
-        # back to an ordered form now
             tables = user_tables & tables
-        tables = [t for t in tables]
-        # silly workaround time: the aggregate update process caches data that
-        # the hypervisor update process relies on, so we push the hypervisor
-        # update to the end of the list
-        if 'hypervisor' in tables:
-            tables.remove('hypervisor')
-            tables.append('hypervisor')
-        # XXX: the hypervisor table /must/ run with the aggregate table - I
-        # need to figure out a way to handle that with user specified lists of
-        # tables . . .
-        #
-        # silly workaround time, part two: the instances update process caches
-        # data that the project table update requires, so push the project
-        # update to the end of the list
-        if 'project' in tables:
-            tables.remove('project')
-            tables.append('project')
-        # XXX: they project table /must/ run with the instances table. As
-        # above, that requires some thought when dealing with user specified
-        # table lists. The 'has_instances' column is a shortcut column, so it
-        # may not be that much of an issue in practise, but that needs to be
-        # looked into.
-        #
-        # It's also worth noting that this is an issue right now - the next
-        # instance table update will update the has_instances column, but only
-        # for projects that have instances mentioned in the last_update period,
-        # with only a full instance table update capturing everything. I'm not
-        # sure how best to handle this - possibly with a local query against
-        # the existing reporting.instance data?
-        #
-        # Note: this whole dependency thing needs a better implementation, with
-        # classes declaring their dependencies and then some algorithmic
-        # process coming up with a processing order.
-        return tables
+        # add in any missing dependencies
+        required_tmp = tables
+        required = set()
+        while required != required_tmp:
+            required = required_tmp
+            for table in required:
+                required_tmp = required_tmp | dependencies[table]
+        # remove tables that aren't being processed from the dependency map
+        for table in dependencies.keys():
+            if table not in required:
+                del dependencies[table]
+        required = [t for t in required]
+        # alphabetically sort, so that we have a consistent base
+        required.sort()
+        # then sort based on dependency count
+        required.sort(key=lambda x: len(dependencies[x]))
+        # finally run the basic topological sort
+        resolved = []
+        while len(required) > 0:
+            table = required.pop(0)
+            if len(dependencies[table]) > 0:
+                raise TableDependencyError(
+                        "Circular table dependencies found. "
+                        )
+            resolved.append(table)
+            for t in dependencies.keys():
+                dependencies[t] = dependencies[t] - set([table])
+            required.sort(key=lambda x: len(dependencies[x]))
+
+        return resolved
+
+    # Note: this will be overridden in any class that needs to declare
+    # dependencies
+    @classmethod
+    def _get_dependencies(cls):
+        return set()
 
     @classmethod
     def _cache_data(cls, key, data):
@@ -575,6 +647,10 @@ class Hypervisor(Entity):
     #
     # Right now this is entirely the database.
 
+    @classmethod
+    def _get_dependencies(cls):
+        return set(['aggregate'])
+
     def new_record(self):
         return {
             'id': None,
@@ -719,6 +795,17 @@ class Project(Entity):
         self.tenant_member_data = []
         self.has_instance_data = {}
 
+    # XXX: this dependency has the potential to result in nasty interactions!
+    # Running a forced update of the project table (which is a small task on
+    # its own, and meaningless given it has no last_update support) will now
+    # result in doing a forced update of the instance table, which is hellishly
+    # painful! It's not a likely scenario, but it's currently a possibility -
+    # at present this is just a case of caveat emptor, but in future some kind
+    # of sanity checking of arguments may be necessary.
+    @classmethod
+    def _get_dependencies(cls):
+        return set(['instance'])
+
     def new_record(self):
         return {
             'id': None,
@@ -820,6 +907,10 @@ class Project(Entity):
             if not t['organisation']:
                 t['organisation'] = shib_attr['mail'].split('@')[1]
             # default is set to False in the new_record() method
+            #
+            # Note: this will always work correctly because the instance update
+            # pulls in all active instances, not just the ones that have been
+            # updated recently.
             if t['id'] in self.has_instance_data:
                 t['has_instances'] = True
             self.data.append(t)
@@ -1021,10 +1112,19 @@ class Instance(Entity):
         self.db_data = []
         self.hist_agg_data = []
         self.has_instance_data = {}
+        self.hypervisor_az_data = {}
+
+    @classmethod
+    def _get_dependencies(cls):
+        return set(['aggregate'])
 
     def extract(self):
         start = datetime.now()
         self._extract_with_last_update()
+        try:
+            self.hypervisor_az_data = Entity._get_cached_data("hypervisor_az")
+        except KeyError:
+            pass
         self.extract_time = datetime.now() - start
 
     def new_hist_agg(self, date):
@@ -1035,7 +1135,11 @@ class Instance(Entity):
             'local_storage': 0
         }
 
-    def generate_hist_agg_data(self):
+    def transform(self):
+        # we do quite a lot of work here within a big loop because we only want
+        # to traverse the (potentially very large) instances dataset once.
+        start = datetime.now()
+
         # the data should be ordered by created_at, so we start by taking the
         # created_at value and use that as the starting point.
         def date_to_day(date):
@@ -1085,16 +1189,27 @@ class Instance(Entity):
                     hist_agg[key]['local_storage'] += (instance['root'] +
                                                        instance['ephemeral'])
                     day = day + timedelta(1)
+
+                # update the project has_instance data for this instance
                 self.has_instance_data[instance['project_id']] = True
+
+                # and make sure that the instance's availability_zone is set
+                # correctly
+                instance['availability_zone'] = None
+                try:
+                    az = self.hypervisor_az_data[instance['hypervisor']]
+                    instance['availability_zone'] = az
+                except KeyError:
+                    logging.info(
+                        "Hypervisor %s not found in any availability zone",
+                        instance['hypervisor']
+                        )
+                    pass
             keys = hist_agg.keys()
             keys.sort()
             for key in keys:
                 self.hist_agg_data.append(hist_agg[key])
-
-    def transform(self):
-        start = datetime.now()
         self.data = self.db_data
-        self.generate_hist_agg_data()
         Entity._cache_data('has_instance', self.has_instance_data)
         self.transform_time = datetime.now() - start
 
