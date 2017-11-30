@@ -564,15 +564,18 @@ class Aggregate(Entity):
             agg['active'] = not aggregate.deleted
             self.agg_data.append(agg)
 
-            for host in aggregate.hosts:
-                hname = host.split('.')[0]
-                h = self.new_agg_host_record()
-                h['id'] = id
-                h['availability_zone'] = az
-                h['host'] = hname
-                self.agg_host_data.append(h)
+            # this is meaningless if an aggregate has no availability_zone
+            # specified
+            if az:
+                for host in aggregate.hosts:
+                    hname = host.split('.')[0]
+                    h = self.new_agg_host_record()
+                    h['id'] = id
+                    h['availability_zone'] = az
+                    h['host'] = hname
+                    self.agg_host_data.append(h)
 
-                self.hypervisor_az_data[hname] = az
+                    self.hypervisor_az_data[hname] = az
 
         self.data = self.agg_data
         Entity._cache_data('hypervisor_az', self.hypervisor_az_data)
