@@ -486,8 +486,11 @@ class Aggregate(Entity):
             "delete from aggregate_host"
         ),
         'aggregate_host': (
-            "replace into aggregate_host (id, availability_zone, host) "
-            "values (%(id)s, %(availability_zone)s, %(host)s)"
+            "replace into aggregate_host (id, availability_zone, host, active)"
+            " values (%(id)s, %(availability_zone)s, %(host)s, 1)"
+        ),
+        'clear_active': (
+            "update aggregate_host set active=0"
         ),
         'hypervisor_az_update': (
             "update hypervisor set availability_zone = %(availability_zone)s "
@@ -604,9 +607,9 @@ class Aggregate(Entity):
         # hypervisor queries happen they can be out of sync. There's no way to
         # avoid this, though, outside of wrapping /everything/ in a big
         # transaction, which I'd really like to avoid.
-        if not self.dry_run:
-            self._load_many('aggregate_host', self.agg_host_data)
-            self.set_last_update(table='aggregate_host')
+        self._run_sql_cursor(DB.local_cursor(), 'clear_active')
+        self._load_many('aggregate_host', self.agg_host_data)
+        self.set_last_update(table='aggregate_host')  # commits transaction
 
         self.load_time = datetime.now() - start
 
@@ -630,9 +633,12 @@ class Hypervisor(Entity):
         'update': (
             "replace into hypervisor "
             "(id, availability_zone, host, hostname, ip_address, cpus, "
-            "memory, local_storage, last_seen) "
+            "memory, local_storage, last_seen, active) "
             "values (%(id)s, %(availability_zone)s, %(host)s, %(hostname)s, "
-            "%(ip_address)s, %(cpus)s, %(memory)s, %(local_storage)s, null)"
+            "%(ip_address)s, %(cpus)s, %(memory)s, %(local_storage)s, null, 1)"
+        ),
+        'clear_active': (
+            "update hypervisor set active=0"
         ),
     }
 
@@ -711,7 +717,8 @@ class Hypervisor(Entity):
 
     def load(self):
         start = datetime.now()
-        self._load_simple()
+        self._run_sql_cursor(DB.local_cursor(), 'clear_active')
+        self._load_simple()  # commits transaction
         self.load_time = datetime.now() - start
 
 

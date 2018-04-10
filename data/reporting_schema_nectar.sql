@@ -45,6 +45,7 @@ create table if not exists hypervisor (
         memory int(11) comment 'Total installed memory in MB',
         local_storage int(11) comment 'Total local disk in GB',
         last_seen timestamp default current_timestamp on update current_timestamp comment 'last seen',
+        active boolean default false comment 'Is this hypervisor active',
         primary key (id, availability_zone, host),
         key hypervisor_hostname (hostname),
         key hypervisor_ip (ip_address),
@@ -198,9 +199,10 @@ create table if not exists aggregate_host (
         availability_zone varchar(255) comment 'Availability zone this aggregate is defined on',
         host varchar(255) comment 'Host name, same as first part of hypervisor.hostname',
         last_seen timestamp default current_timestamp on update current_timestamp comment 'last seen',
+        active boolean default false comment 'Is this mapping active',
         primary key (id, availability_zone, host),
         key aggregate_host_last_seen (last_seen)
-) comment 'Active (non-deleted) mappings between aggregates and hosts';
+) comment 'Mappings between aggregates and hosts';
 
 -- query to fill this (in a single-level DB - i.e. tenjin, not NeCTAR)
 -- select
