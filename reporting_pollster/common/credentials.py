@@ -17,7 +17,7 @@ def get_nova_credentials():
     d['auth_url'] = os.environ['OS_AUTH_URL']
     d['project_name'] = os.environ['OS_PROJECT_NAME']
     try:
-        d['project_domain_name'] = os.environ['OS_PROJECT_NAME']
+        d['project_domain_name'] = os.environ['OS_PROJECT_DOMAIN_NAME']
     except KeyError:
         d['project_domain_name'] = 'default'
     return d
